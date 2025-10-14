@@ -1,21 +1,22 @@
-import { ref, watch, nextTick, computed, reactive } from 'vue'
+import { ref, nextTick, computed, reactive, type Ref } from 'vue'
 import { useToast } from './useToast'
 import { useI18n } from 'vue-i18n'
 
 import { v4 as uuidv4 } from 'uuid'
-import type { Ref } from 'vue'
 import type {
-  ModelConfig,
   IModelManager,
   IHistoryManager,
   Template,
   PromptRecordChain,
+  PromptRecordType,
   IPromptService,
   ITemplateManager,
   OptimizationMode,
-  OptimizationRequest
+  OptimizationRequest,
+  ConversationMessage
 } from '@prompt-optimizer/core'
 import type { AppServices } from '../types/services'
+import { useFunctionMode, type FunctionMode } from './useFunctionMode'
 
 
 type PromptChain = PromptRecordChain
@@ -49,6 +50,7 @@ export function usePromptOptimizer(
   const templateManager = computed(() => services.value?.templateManager)
   const historyManager = computed(() => services.value?.historyManager)
   const promptService = computed(() => services.value?.promptService)
+  const { functionMode } = useFunctionMode(services)
   
   // 使用 reactive 创建一个响应式状态对象，而不是单独的 ref
   const state = reactive({
@@ -67,6 +69,7 @@ export function usePromptOptimizer(
     
     // 方法 (将在下面定义并绑定到 state)
     handleOptimizePrompt: async () => {},
+    handleOptimizePromptWithContext: async (advancedContext: { variables: Record<string, string>, messages?: ConversationMessage[], tools?: any[] }) => {},
     handleIteratePrompt: async (payload: { originalPrompt: string, optimizedPrompt: string, iterateInput: string }) => {},
     handleSwitchVersion: async (version: PromptChain['versions'][number]) => {}
   })
@@ -124,16 +127,145 @@ export function usePromptOptimizer(
 
             try {
               // Create new record chain with enhanced metadata，ElectronProxy会自动处理序列化
+              // 依据 functionMode 与当前模板类型决定历史记录类型
+              const isPro = (functionMode.value as FunctionMode) === 'pro'
+              const baseType = (optimizationMode.value === 'system' ? 'optimize' : 'userOptimize') as PromptRecordType
+              const recordType = (() => {
+                if (isPro) {
+                  return (optimizationMode.value === 'system' ? 'contextSystemOptimize' : 'contextUserOptimize') as PromptRecordType
+                }
+                // 兼容：若选择的是 context 模板（即使当前模式非 pro），也记录为 context*
+                const tplType = currentTemplate.metadata?.templateType
+                if (tplType === 'contextSystemOptimize' || tplType === 'contextUserOptimize') return tplType as PromptRecordType
+                return baseType
+              })()
+
               const recordData = {
                 id: uuidv4(),
                 originalPrompt: state.prompt,
                 optimizedPrompt: state.optimizedPrompt,
-                type: optimizationMode.value === 'system' ? 'optimize' : 'userOptimize',
+                type: recordType,
                 modelKey: optimizeModel.value,
                 templateId: currentTemplate.id,
                 timestamp: Date.now(),
                 metadata: {
-                  optimizationMode: optimizationMode.value
+                  optimizationMode: optimizationMode.value,
+                  functionMode: functionMode.value
+                }
+              };
+
+              const newRecord = await historyManager.value!.createNewChain(recordData);
+
+              state.currentChainId = newRecord.chainId;
+              state.currentVersions = newRecord.versions;
+              state.currentVersionId = newRecord.currentRecord.id;
+
+              toast.success(t('toast.success.optimizeSuccess'))
+            } catch (error) {
+              console.error('创建历史记录失败:', error)
+              toast.error('创建历史记录失败: ' + (error as Error).message)
+            } finally {
+              state.isOptimizing = false
+            }
+          },
+          onError: (error: Error) => {
+            console.error(t('toast.error.optimizeProcessFailed'), error)
+            toast.error(error.message || t('toast.error.optimizeFailed'))
+            state.isOptimizing = false
+          }
+        }
+      )
+    } catch (error: any) {
+      console.error(t('toast.error.optimizeFailed'), error)
+      toast.error(error.message || t('toast.error.optimizeFailed'))
+    } finally {
+      state.isOptimizing = false
+    }
+  }
+  
+  // 带上下文的优化提示词
+  state.handleOptimizePromptWithContext = async (advancedContext: { variables: Record<string, string>, messages?: ConversationMessage[], tools?: any[] }) => {
+    if (!state.prompt.trim() || state.isOptimizing) return
+
+    // 根据优化模式选择对应的模板
+    const currentTemplate = optimizationMode.value === 'system' 
+      ? state.selectedOptimizeTemplate 
+      : state.selectedUserOptimizeTemplate
+
+    if (!currentTemplate) {
+      toast.error(t('toast.error.noOptimizeTemplate'))
+      return
+    }
+
+    if (!optimizeModel.value) {
+      toast.error(t('toast.error.noOptimizeModel'))
+      return
+    }
+
+    // 在开始优化前立即清空状态，确保没有竞态条件
+    state.isOptimizing = true
+    state.optimizedPrompt = ''  // 强制同步清空
+    state.optimizedReasoning = '' // 强制同步清空
+    
+    // 等待一个微任务确保状态更新完成
+    await nextTick()
+
+    try {
+      // 构建带有高级上下文的优化请求
+      const request: OptimizationRequest = {
+        optimizationMode: optimizationMode.value,
+        targetPrompt: state.prompt,
+        templateId: currentTemplate.id,
+        modelKey: optimizeModel.value,
+        // 关键：添加高级上下文
+        advancedContext: {
+          variables: advancedContext.variables,
+          messages: advancedContext.messages,
+          tools: advancedContext.tools  // 🆕 添加工具传递
+        }
+      }
+
+      console.log('[usePromptOptimizer] Starting optimization with advanced context:', request.advancedContext)
+
+      // 使用重构后的优化API
+      await promptService.value!.optimizePromptStream(
+        request,
+        {
+          onToken: (token: string) => {
+            state.optimizedPrompt += token
+          },
+          onReasoningToken: (reasoningToken: string) => {
+            state.optimizedReasoning += reasoningToken
+          },
+          onComplete: async () => {
+            if (!currentTemplate) return
+
+            // 创建历史记录 - 包含上下文信息
+            try {
+              const isPro = (functionMode.value as FunctionMode) === 'pro'
+              const baseType = (optimizationMode.value === 'system' ? 'optimize' : 'userOptimize') as PromptRecordType
+              const recordType = (() => {
+                if (isPro) return (optimizationMode.value === 'system' ? 'contextSystemOptimize' : 'contextUserOptimize') as PromptRecordType
+                const tplType = currentTemplate.metadata?.templateType
+                if (tplType === 'contextSystemOptimize' || tplType === 'contextUserOptimize') return tplType as PromptRecordType
+                return baseType
+              })()
+
+              const recordData = {
+                id: uuidv4(),
+                originalPrompt: state.prompt,
+                optimizedPrompt: state.optimizedPrompt,
+                type: recordType,
+                modelKey: optimizeModel.value,
+                templateId: currentTemplate.id,
+                timestamp: Date.now(),
+                // 添加上下文信息到历史记录
+                metadata: {
+                  optimizationMode: optimizationMode.value,
+                  functionMode: functionMode.value,
+                  hasAdvancedContext: true,
+                  variableCount: Object.keys(advancedContext.variables).length,
+                  messageCount: advancedContext.messages?.length || 0
                 }
               };
 

@@ -18,8 +18,22 @@ export * from './services/history/errors'
 export { ElectronHistoryManagerProxy } from './services/history/electron-proxy'
 
 // 导出LLM服务相关
-export type { ILLMService, Message, StreamHandlers, LLMResponse, ModelInfo, ModelOption } from './services/llm/types'
+export type {
+  ILLMService,
+  Message,
+  StreamHandlers,
+  LLMResponse,
+  ModelInfo,
+  ModelOption,
+  ITextAdapterRegistry,
+  ITextProviderAdapter,
+  TextProvider,
+  TextModel,
+  TextModelConfig,
+  ConnectionSchema
+} from './services/llm/types'
 export { LLMService, createLLMService } from './services/llm/service'
+export { TextAdapterRegistry, createTextAdapterRegistry } from './services/llm/adapters/registry'
 export { ElectronLLMProxy } from './services/llm/electron-proxy'
 export * from './services/llm/errors'
 
@@ -27,9 +41,32 @@ export * from './services/llm/errors'
 export { ModelManager, createModelManager } from './services/model/manager'
 export * from './services/model/types'
 export * from './services/model/defaults'
+export * from './services/model/parameter-schema'
+export * from './services/model/parameter-utils'
 export * from './services/model/advancedParameterDefinitions'
 export { ElectronModelManagerProxy } from './services/model/electron-proxy'
 export { ElectronConfigManager, isElectronRenderer } from './services/model/electron-config'
+
+// 导出图像模型管理与服务
+export { ImageModelManager, createImageModelManager } from './services/image-model/manager'
+export { ImageService, createImageService } from './services/image/service'
+export { ImageAdapterRegistry as _ImageAdapterRegistry, createImageAdapterRegistry } from './services/image/adapters/registry'
+export { ElectronImageServiceProxy, ElectronImageModelManagerProxy } from './services/image/electron-proxy'
+// 导出图像服务类型,将 ConnectionSchema 重命名为 ImageConnectionSchema 避免与 model/types 中的 ConnectionSchema 冲突
+export type {
+  ImageProvider,
+  ImageModel,
+  ImageRequest,
+  ImageResult,
+  ImageProgressHandlers,
+  ImageModelConfig,
+  IImageModelManager,
+  IImageProviderAdapter,
+  IImageAdapterRegistry,
+  IImageService,
+  ConnectionSchema as ImageConnectionSchema,
+  ImageParameterDefinition
+} from './services/image/types'
 
 // 导出存储相关
 export * from './services/storage/types'
@@ -67,14 +104,7 @@ export {
   isRunningInElectron,
   isElectronApiReady,
   waitForElectronApi,
-  checkVercelApiAvailability,
-  resetVercelStatusCache,
-  checkDockerApiAvailability,
-  resetDockerStatusCache,
-  isVercel,
-  isDocker,
   isBrowser,
-  getProxyUrl,
   getEnvVar,
   scanCustomModelEnvVars,
   clearCustomModelEnvCache,
@@ -95,6 +125,7 @@ export {
   UI_SETTINGS_KEYS,
   MODEL_SELECTION_KEYS,
   TEMPLATE_SELECTION_KEYS,
+  IMAGE_MODE_KEYS,
   ALL_STORAGE_KEYS,
   ALL_STORAGE_KEYS_ARRAY
 } from './constants/storage-keys'
@@ -103,5 +134,15 @@ export type {
   UISettingsKey,
   ModelSelectionKey,
   TemplateSelectionKey,
+  ImageModeKey,
   StorageKey
 } from './constants/storage-keys'
+
+// 导出上下文相关
+export * from './services/context/types'
+export { createContextRepo } from './services/context/repo'
+export { ElectronContextRepoProxy } from './services/context/electron-proxy'
+export * from './services/context/constants'
+
+// 导出高级模块相关类型
+export * from './types/advanced'

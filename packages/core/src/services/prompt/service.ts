@@ -1,4 +1,4 @@
-import { IPromptService, OptimizationRequest } from './types';
+import { IPromptService, OptimizationRequest, CustomConversationRequest } from './types';
 import { Message, StreamHandlers, ILLMService } from '../llm/types';
 import { PromptRecord } from '../history/types';
 import { IModelManager } from '../model/types';
@@ -100,8 +100,24 @@ export class PromptService implements IPromptService {
 
       const context: TemplateContext = {
         originalPrompt: request.targetPrompt,
-        optimizationMode: request.optimizationMode
+        optimizationMode: request.optimizationMode,
+        // 🆕 传递高级上下文信息到模板
+        customVariables: request.advancedContext?.variables,
+        conversationMessages: request.advancedContext?.messages,
+        tools: request.advancedContext?.tools  // 🆕 工具信息
       };
+
+      // 🆕 如果有会话消息，将其格式化为文本并添加到上下文
+      if (request.advancedContext?.messages && request.advancedContext.messages.length > 0) {
+        const conversationText = TemplateProcessor.formatConversationAsText(request.advancedContext.messages);
+        context.conversationContext = conversationText;
+      }
+
+      // 🆕 如果有工具信息，将其格式化为文本并添加到上下文
+      if (request.advancedContext?.tools && request.advancedContext.tools.length > 0) {
+        const toolsText = TemplateProcessor.formatToolsAsText(request.advancedContext.tools);
+        context.toolsContext = toolsText;
+      }
 
       const messages = TemplateProcessor.processTemplate(template, context);
       const result = await this.llmService.sendMessage(messages, request.modelKey);
@@ -295,10 +311,30 @@ export class PromptService implements IPromptService {
         throw new OptimizationError('Template not found or invalid', request.targetPrompt);
       }
 
-      const context: TemplateContext = {
+      // 创建基础上下文
+      const baseContext: TemplateContext = {
         originalPrompt: request.targetPrompt,
         optimizationMode: request.optimizationMode
       };
+
+      // 扩展上下文以支持高级功能
+      const context = TemplateProcessor.createExtendedContext(
+        baseContext,
+        request.advancedContext?.variables,
+        request.advancedContext?.messages
+      );
+
+      // 如果有会话消息，将其格式化为文本并添加到上下文
+      if (request.advancedContext?.messages && request.advancedContext.messages.length > 0) {
+        const conversationText = TemplateProcessor.formatConversationAsText(request.advancedContext.messages);
+        context.conversationContext = conversationText;
+      }
+
+      // 🆕 如果有工具信息，将其格式化为文本并添加到上下文
+      if (request.advancedContext?.tools && request.advancedContext.tools.length > 0) {
+        const toolsText = TemplateProcessor.formatToolsAsText(request.advancedContext.tools);
+        context.toolsContext = toolsText;
+      }
 
       const messages = TemplateProcessor.processTemplate(template, context);
 
@@ -310,16 +346,21 @@ export class PromptService implements IPromptService {
           onToken: callbacks.onToken,
           onReasoningToken: callbacks.onReasoningToken, // 支持推理内容流
           onComplete: async (response) => {
-            if (response) {
-              // 验证主要内容
-              this.validateResponse(response.content, request.targetPrompt);
+            try {
+              if (response) {
+                // 验证主要内容
+                this.validateResponse(response.content, request.targetPrompt);
 
-              // 注意：历史记录保存由UI层的historyManager.createNewChain方法处理
-              // 移除重复的saveOptimizationHistory调用以避免重复保存
+                // 注意：历史记录保存由UI层的historyManager.createNewChain方法处理
+                // 移除重复的saveOptimizationHistory调用以避免重复保存
+              }
+
+              // 调用原始完成回调，传递结构化响应
+              callbacks.onComplete(response);
+            } catch (error) {
+              // 如果验证失败，调用错误回调
+              callbacks.onError(error instanceof Error ? error : new Error(String(error)));
             }
-
-            // 调用原始完成回调，传递结构化响应
-            callbacks.onComplete(response);
           },
           onError: callbacks.onError
         }
@@ -381,14 +422,19 @@ export class PromptService implements IPromptService {
           onToken: handlers.onToken,
           onReasoningToken: handlers.onReasoningToken, // 支持推理内容流
           onComplete: async (response) => {
-            if (response) {
-              // 验证迭代结果
-              this.validateResponse(response.content, lastOptimizedPrompt);
+            try {
+              if (response) {
+                // 验证迭代结果
+                this.validateResponse(response.content, lastOptimizedPrompt);
+              }
+              
+              // 调用原始完成回调，传递结构化响应
+              // 注意：迭代历史记录由UI层的historyManager.addIteration方法处理
+              handlers.onComplete(response);
+            } catch (error) {
+              // 如果验证失败，调用错误回调
+              handlers.onError(error instanceof Error ? error : new Error(String(error)));
             }
-            
-            // 调用原始完成回调，传递结构化响应
-            // 注意：迭代历史记录由UI层的historyManager.addIteration方法处理
-            handlers.onComplete(response);
           },
           onError: handlers.onError
         }
@@ -416,10 +462,10 @@ export class PromptService implements IPromptService {
   /**
    * 获取默认模板ID
    */
-  private async getDefaultTemplateId(templateType: 'optimize' | 'userOptimize' | 'iterate'): Promise<string> {
+  private async getDefaultTemplateId(templateType: 'optimize' | 'userOptimize' | 'text2imageOptimize' | 'image2imageOptimize' | 'imageIterate' | 'iterate' | 'contextSystemOptimize' | 'contextUserOptimize' | 'contextIterate'): Promise<string> {
     try {
       // 尝试获取指定类型的模板列表
-      const templates = await this.templateManager.listTemplatesByType(templateType);
+      const templates = await this.templateManager.listTemplatesByType(templateType as any);
       if (templates.length > 0) {
         // 返回列表中第一个模板的ID
         return templates[0].id;
@@ -430,18 +476,24 @@ export class PromptService implements IPromptService {
 
     // 如果指定类型没有模板，尝试获取相关类型的模板作为回退
     try {
-      let fallbackTypes: ('optimize' | 'userOptimize' | 'iterate')[] = [];
+      let fallbackTypes: ('optimize' | 'userOptimize' | 'text2imageOptimize' | 'image2imageOptimize' | 'iterate')[] = [];
 
-      if (templateType === 'optimize') {
+      if (templateType === 'optimize' || templateType === 'contextSystemOptimize') {
         fallbackTypes = ['userOptimize']; // optimize类型回退到userOptimize
-      } else if (templateType === 'userOptimize') {
+      } else if (templateType === 'userOptimize' || templateType === 'contextUserOptimize') {
         fallbackTypes = ['optimize']; // userOptimize类型回退到optimize
-      } else if (templateType === 'iterate') {
+      } else if (templateType === 'iterate' || templateType === 'contextIterate') {
         fallbackTypes = ['optimize', 'userOptimize']; // iterate类型回退到任意优化类型
+      } else if (templateType === 'text2imageOptimize') {
+        fallbackTypes = ['userOptimize', 'optimize']; // 文生图回退到基础优化
+      } else if (templateType === 'image2imageOptimize') {
+        fallbackTypes = ['text2imageOptimize', 'userOptimize', 'optimize']; // 图生图优先回退到文生图
+      } else if (templateType === 'imageIterate') {
+        fallbackTypes = ['iterate', 'text2imageOptimize', 'userOptimize']; // 图像迭代回退到通用迭代/文生图
       }
 
       for (const fallbackType of fallbackTypes) {
-        const fallbackTemplates = await this.templateManager.listTemplatesByType(fallbackType);
+        const fallbackTemplates = await this.templateManager.listTemplatesByType(fallbackType as any);
         if (fallbackTemplates.length > 0) {
           console.log(`Using fallback template type ${fallbackType} for ${templateType}`);
           return fallbackTemplates[0].id;
@@ -478,6 +530,95 @@ export class PromptService implements IPromptService {
   // 
   // 相比之下，优化操作会创建新的链，所以可以在核心层处理
   // 这种混合架构是经过权衡的设计决策
+
+  /**
+   * 自定义会话测试（流式）- 高级模式功能
+   */
+  async testCustomConversationStream(
+    request: CustomConversationRequest,
+    callbacks: StreamHandlers
+  ): Promise<void> {
+    try {
+      // 验证请求
+      if (!request.modelKey?.trim()) {
+        throw new TestError('Model key is required', '', '');
+      }
+      if (!request.messages || request.messages.length === 0) {
+        throw new TestError('At least one message is required', '', '');
+      }
+
+      // 验证模型存在
+      const modelConfig = await this.modelManager.getModel(request.modelKey);
+      if (!modelConfig) {
+        throw new TestError('Model not found', '', '');
+      }
+
+      // 处理会话消息：替换变量
+      const processedMessages = TemplateProcessor.processConversationMessages(
+        request.messages,
+        request.variables
+      );
+
+      if (processedMessages.length === 0) {
+        throw new TestError('No valid messages after processing', '', '');
+      }
+
+      // 使用流式发送，根据是否有工具选择不同的方法
+      if (request.tools && request.tools.length > 0) {
+        // 🆕 使用支持工具的流式发送
+        await this.llmService.sendMessageStreamWithTools(
+          processedMessages,
+          request.modelKey,
+          request.tools,
+          {
+            onToken: callbacks.onToken,
+            onReasoningToken: callbacks.onReasoningToken,
+            onToolCall: callbacks.onToolCall,  // 🆕 传递工具调用回调
+            onComplete: async (response) => {
+              if (response) {
+                console.log('[PromptService] Custom conversation test with tools completed successfully');
+                callbacks.onComplete?.(response);
+              }
+            },
+            onError: (error) => {
+              console.error('[PromptService] Custom conversation test with tools failed:', error);
+              callbacks.onError?.(error);
+            }
+          }
+        );
+      } else {
+        // 传统的流式发送（无工具）
+        await this.llmService.sendMessageStream(
+          processedMessages,
+          request.modelKey,
+          {
+            onToken: callbacks.onToken,
+            onReasoningToken: callbacks.onReasoningToken,
+            onComplete: async (response) => {
+              if (response) {
+                console.log('[PromptService] Custom conversation test completed successfully');
+                callbacks.onComplete?.(response);
+              }
+            },
+            onError: (error) => {
+              console.error('[PromptService] Custom conversation test failed:', error);
+              callbacks.onError?.(error);
+            }
+          }
+        );
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[PromptService] Custom conversation test error:', errorMessage);
+      
+      // 通过回调传递错误
+      if (callbacks.onError) {
+        callbacks.onError(new Error(`Custom conversation test failed: ${errorMessage}`));
+      } else {
+        throw new TestError(`Custom conversation test failed: ${errorMessage}`, '', '');
+      }
+    }
+  }
 }
 
 

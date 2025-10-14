@@ -128,7 +128,7 @@ export function usePromptHistory(
   // 添加一个刷新历史记录的函数
   const refreshHistory = async () => {
     const chains = await historyManager.value!.getAllChains()
-    state.history = [...chains]
+    state.history.splice(0, state.history.length, ...chains)
   }
 
   // Watch history display state
@@ -138,8 +138,8 @@ export function usePromptHistory(
     }
   })
 
-  // Watch version changes, update history
-  watch([currentVersions], async () => {
+  // Watch version and chain changes, update history
+  watch([currentVersions, currentChainId], async (newValues, oldValues) => {
     await refreshHistory()
   })
 

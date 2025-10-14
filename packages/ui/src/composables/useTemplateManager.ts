@@ -1,19 +1,10 @@
-import { ref, watch, computed, reactive } from 'vue'
-import type { Ref } from 'vue'
+import { watch, computed, reactive, type Ref } from 'vue'
 import { useToast } from './useToast'
 import { useI18n } from 'vue-i18n'
 import { usePreferences } from './usePreferenceManager'
-import type { Template, ITemplateManager } from '@prompt-optimizer/core'
+import { TEMPLATE_SELECTION_KEYS, type Template } from '@prompt-optimizer/core'
+import { useFunctionMode, type FunctionMode } from './useFunctionMode'
 import type { AppServices } from '../types/services'
-import { TEMPLATE_SELECTION_KEYS } from '@prompt-optimizer/core'
-
-interface TemplateSelector extends Element {
-  __vueParentComponent?: {
-    ctx?: {
-      refresh?: () => void
-    }
-  }
-}
 
 export interface TemplateManagerHooks {
   showTemplates: boolean
@@ -47,6 +38,7 @@ export function useTemplateManager(
   
   // 模型管理器引用
   const templateManager = computed(() => services.value?.templateManager)
+  const { functionMode, ensureInitialized: ensureFunctionModeInitialized } = useFunctionMode(services)
 
   // 创建一个 reactive 状态对象
   const state = reactive<TemplateManagerHooks>({
@@ -62,9 +54,11 @@ export function useTemplateManager(
         type
       })
 
-      if (type === 'optimize') {
+      // 将选择映射到对应家族（系统/用户/迭代），无论是否为 context* 类型
+      const normalized = normalizeTypeToFamily(type)
+      if (normalized === 'system') {
         selectedOptimizeTemplate.value = template
-      } else if (type === 'userOptimize') {
+      } else if (normalized === 'user') {
         selectedUserOptimizeTemplate.value = template
       } else {
         selectedIterateTemplate.value = template
@@ -72,26 +66,12 @@ export function useTemplateManager(
 
       if (template) {
         // 使用内部的保存逻辑，异步执行但不等待
-        saveTemplateSelection(template, type as 'optimize' | 'userOptimize' | 'iterate').catch(error => {
+        saveTemplateSelection(template, type as any).catch(error => {
           console.error('[useTemplateManager] 保存模板选择失败:', error)
           toast.error('保存模板选择失败')
         })
 
-        // 只在明确要求时显示toast
-        if (showToast) {
-          let typeText = ''
-          if (type === 'optimize') {
-            typeText = t('common.optimize')
-          } else if (type === 'userOptimize') {
-            typeText = '用户提示词优化'
-          } else {
-            typeText = t('common.iterate')
-          }
-          toast.success(t('toast.success.templateSelected', {
-            type: typeText,
-            name: template.name
-          }))
-        }
+        // 不再显示toast提示，移除选择成功的冒泡提示
       }
     },
     openTemplateManager: (type: string) => {
@@ -108,30 +88,22 @@ export function useTemplateManager(
   })
 
   // 保存模板选择到存储
-  const saveTemplateSelection = async (template: Template, type: 'optimize' | 'userOptimize' | 'iterate') => {
-    let storageKey: string;
-    switch (type) {
-      case 'optimize':
-        storageKey = TEMPLATE_SELECTION_KEYS.SYSTEM_OPTIMIZE_TEMPLATE;
-        break;
-      case 'userOptimize':
-        storageKey = TEMPLATE_SELECTION_KEYS.USER_OPTIMIZE_TEMPLATE;
-        break;
-      case 'iterate':
-        storageKey = TEMPLATE_SELECTION_KEYS.ITERATE_TEMPLATE;
-        break;
-      default:
-        throw new Error(`[useTemplateManager] 未知的模板类型，无法保存: ${type}`);
-    }
+  const saveTemplateSelection = async (
+    template: Template,
+    type: 'optimize' | 'userOptimize' | 'iterate' | 'contextSystemOptimize' | 'contextUserOptimize' | 'contextIterate'
+  ) => {
+    const storageKey = resolveSelectionKey(type)
     await setPreference(storageKey, template.id)
   }
 
   // Initialize template selection
   const initTemplateSelection = async () => {
     try {
+      await ensureFunctionModeInitialized()
+      const mode = functionMode.value as FunctionMode
 
       const loadTemplate = async (
-        type: 'optimize' | 'userOptimize' | 'iterate',
+        type: 'optimize' | 'userOptimize' | 'iterate' | 'contextSystemOptimize' | 'contextUserOptimize' | 'contextIterate',
         storageKey: string,
         targetRef: Ref<Template | null>
       ) => {
@@ -152,7 +124,7 @@ export function useTemplateManager(
         }
         
         // 回退逻辑：加载该类型的第一个模板
-        const templates = await templateManager.value!.listTemplatesByType(type)
+        const templates = await templateManager.value!.listTemplatesByType(type as any)
         if (templates.length > 0) {
           targetRef.value = templates[0]
           await setPreference(storageKey, templates[0].id) // 保存新的默认值
@@ -161,11 +133,15 @@ export function useTemplateManager(
         }
       };
       
-      // 并行加载所有模板
+      // 依据当前功能模式确定三类类型与存储键
+      const sysType = (mode === 'pro') ? 'contextSystemOptimize' : 'optimize'
+      const userType = (mode === 'pro') ? 'contextUserOptimize' : 'userOptimize'
+      const itType = (mode === 'pro') ? 'contextIterate' : 'iterate'
+
       await Promise.all([
-        loadTemplate('optimize', TEMPLATE_SELECTION_KEYS.SYSTEM_OPTIMIZE_TEMPLATE, selectedOptimizeTemplate),
-        loadTemplate('userOptimize', TEMPLATE_SELECTION_KEYS.USER_OPTIMIZE_TEMPLATE, selectedUserOptimizeTemplate),
-        loadTemplate('iterate', TEMPLATE_SELECTION_KEYS.ITERATE_TEMPLATE, selectedIterateTemplate),
+        loadTemplate(sysType as any, resolveSelectionKey(sysType as any), selectedOptimizeTemplate),
+        loadTemplate(userType as any, resolveSelectionKey(userType as any), selectedUserOptimizeTemplate),
+        loadTemplate(itType as any, resolveSelectionKey(itType as any), selectedIterateTemplate),
       ]);
 
     } catch (error) {
@@ -181,15 +157,14 @@ export function useTemplateManager(
     }
   }, { immediate: true })
 
-  // 监听模板变化，自动保存到存储
+  // 监听模板变化，自动保存到存储（移除toast提示）
   watch(() => selectedOptimizeTemplate.value, async (newTemplate, oldTemplate) => {
     if (newTemplate && oldTemplate && newTemplate.id !== oldTemplate.id) {
       try {
-        await saveTemplateSelection(newTemplate, 'optimize')
-        toast.success(t('toast.success.templateSelected', {
-          type: t('common.optimize'),
-          name: newTemplate.name
-        }))
+        const mode = functionMode.value as FunctionMode
+        const type = (mode === 'pro') ? 'contextSystemOptimize' : 'optimize'
+        await saveTemplateSelection(newTemplate, type as any)
+        // 不再显示toast提示，移除选择成功的冒泡提示
       } catch (error) {
         console.error('[useTemplateManager] 保存系统优化模板失败:', error)
         toast.error('保存模板选择失败')
@@ -200,11 +175,10 @@ export function useTemplateManager(
   watch(() => selectedUserOptimizeTemplate.value, async (newTemplate, oldTemplate) => {
     if (newTemplate && oldTemplate && newTemplate.id !== oldTemplate.id) {
       try {
-        await saveTemplateSelection(newTemplate, 'userOptimize')
-        toast.success(t('toast.success.templateSelected', {
-          type: '用户提示词优化',
-          name: newTemplate.name
-        }))
+        const mode = functionMode.value as FunctionMode
+        const type = (mode === 'pro') ? 'contextUserOptimize' : 'userOptimize'
+        await saveTemplateSelection(newTemplate, type as any)
+        // 不再显示toast提示，移除选择成功的冒泡提示
       } catch (error) {
         console.error('[useTemplateManager] 保存用户优化模板失败:', error)
         toast.error('保存模板选择失败')
@@ -215,17 +189,96 @@ export function useTemplateManager(
   watch(() => selectedIterateTemplate.value, async (newTemplate, oldTemplate) => {
     if (newTemplate && oldTemplate && newTemplate.id !== oldTemplate.id) {
       try {
-        await saveTemplateSelection(newTemplate, 'iterate')
-        toast.success(t('toast.success.templateSelected', {
-          type: t('common.iterate'),
-          name: newTemplate.name
-        }))
+        const mode = functionMode.value as FunctionMode
+        const type = (mode === 'pro') ? 'contextIterate' : 'iterate'
+        await saveTemplateSelection(newTemplate, type as any)
+        // 不再显示toast提示，移除选择成功的冒泡提示
       } catch (error) {
         console.error('[useTemplateManager] 保存迭代模板失败:', error)
         toast.error('保存模板选择失败')
       }
     }
   })
+
+  // 当功能模式发生变化时，重新从对应键加载选择
+  watch(functionMode, async (mode) => {
+    try {
+      const sysType = (mode === 'pro') ? 'contextSystemOptimize' : 'optimize'
+      const userType = (mode === 'pro') ? 'contextUserOptimize' : 'userOptimize'
+      const itType = (mode === 'pro') ? 'contextIterate' : 'iterate'
+
+      const sysId = await getPreference(resolveSelectionKey(sysType as any), null)
+      const userId = await getPreference(resolveSelectionKey(userType as any), null)
+      const itId = await getPreference(resolveSelectionKey(itType as any), null)
+
+      // 系统
+      if (sysId) {
+        try { selectedOptimizeTemplate.value = await templateManager.value!.getTemplate(sysId) } catch {}
+      } else {
+        const list = await templateManager.value!.listTemplatesByType(sysType as any)
+        if (list.length > 0) {
+          selectedOptimizeTemplate.value = list[0]
+          await setPreference(resolveSelectionKey(sysType as any), list[0].id)
+        }
+      }
+
+      // 用户
+      if (userId) {
+        try { selectedUserOptimizeTemplate.value = await templateManager.value!.getTemplate(userId) } catch {}
+      } else {
+        const list = await templateManager.value!.listTemplatesByType(userType as any)
+        if (list.length > 0) {
+          selectedUserOptimizeTemplate.value = list[0]
+          await setPreference(resolveSelectionKey(userType as any), list[0].id)
+        }
+      }
+
+      // 迭代
+      if (itId) {
+        try { selectedIterateTemplate.value = await templateManager.value!.getTemplate(itId) } catch {}
+      } else {
+        const list = await templateManager.value!.listTemplatesByType(itType as any)
+        if (list.length > 0) {
+          selectedIterateTemplate.value = list[0]
+          await setPreference(resolveSelectionKey(itType as any), list[0].id)
+        }
+      }
+
+    } catch (e) {
+      console.warn('[useTemplateManager] 切换功能模式时加载模板失败:', e)
+    }
+  })
+
+  // 工具函数：将六类类型映射到存储键
+  function resolveSelectionKey(
+    type: 'optimize' | 'userOptimize' | 'iterate' | 'contextSystemOptimize' | 'contextUserOptimize' | 'contextIterate'
+  ): string {
+    switch (type) {
+      case 'optimize':
+        return TEMPLATE_SELECTION_KEYS.SYSTEM_OPTIMIZE_TEMPLATE
+      case 'userOptimize':
+        return TEMPLATE_SELECTION_KEYS.USER_OPTIMIZE_TEMPLATE
+      case 'iterate':
+        return TEMPLATE_SELECTION_KEYS.ITERATE_TEMPLATE
+      case 'contextSystemOptimize':
+        return TEMPLATE_SELECTION_KEYS.CONTEXT_SYSTEM_OPTIMIZE_TEMPLATE
+      case 'contextUserOptimize':
+        return TEMPLATE_SELECTION_KEYS.CONTEXT_USER_OPTIMIZE_TEMPLATE
+      case 'contextIterate':
+        return TEMPLATE_SELECTION_KEYS.CONTEXT_ITERATE_TEMPLATE
+      default:
+        return TEMPLATE_SELECTION_KEYS.SYSTEM_OPTIMIZE_TEMPLATE
+    }
+  }
+
+  // 工具函数：将类型归一化到家族
+  function normalizeTypeToFamily(
+    type: string
+  ): 'system' | 'user' | 'iterate' {
+    if (type === 'optimize' || type === 'contextSystemOptimize') return 'system'
+    if (type === 'userOptimize' || type === 'contextUserOptimize') return 'user'
+    return 'iterate'
+  }
 
   return state
 } 

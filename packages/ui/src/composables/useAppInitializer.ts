@@ -1,4 +1,4 @@
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, type Ref } from 'vue';
 import {
   StorageFactory,
   createModelManager,
@@ -9,29 +9,48 @@ import {
   createPromptService,
   createTemplateLanguageService,
   createCompareService,
+  createContextRepo,
+  ElectronContextRepoProxy,
   ElectronModelManagerProxy,
   ElectronTemplateManagerProxy,
   ElectronHistoryManagerProxy,
   ElectronDataManagerProxy,
   ElectronLLMProxy,
   ElectronPromptServiceProxy,
-  ElectronTemplateLanguageServiceProxy, // 暂时注释掉直到构建完成
+  ElectronTemplateLanguageServiceProxy,
   isRunningInElectron,
   waitForElectronApi,
-  DataManager,
   ElectronPreferenceServiceProxy,
   createPreferenceService,
-} from '../'; // 从UI包的index导入所有核心模块
+} from '../'; // 从UI包的index导出所有核心模块
 import type { AppServices } from '../types/services';
-import type { IModelManager, ITemplateManager, IHistoryManager, ILLMService, IPromptService, IDataManager } from '@prompt-optimizer/core';
-import type { IPreferenceService } from '../types/services';
+import {
+  createImageModelManager,
+  createImageService,
+  createImageAdapterRegistry,
+  createTextAdapterRegistry,
+  type IImageModelManager,
+  type IImageService,
+  type ITextAdapterRegistry,
+  type IModelManager,
+  type ITemplateManager,
+  type IHistoryManager,
+  type ILLMService,
+  type IPromptService,
+  type IDataManager,
+  type IPreferenceService
+} from '@prompt-optimizer/core';
 
 /**
  * 应用服务统一初始化器。
  * 负责根据运行环境（Web 或 Electron）创建和初始化所有核心服务。
  * @returns { services, isInitializing, error }
  */
-export function useAppInitializer() {
+export function useAppInitializer(): {
+  services: Ref<AppServices | null>;
+  isInitializing: Ref<boolean>;
+  error: Ref<Error | null>;
+} {
   const services = ref<AppServices | null>(null);
   const isInitializing = ref(true);
   const error = ref<Error | null>(null);
@@ -48,6 +67,10 @@ export function useAppInitializer() {
       let llmService: ILLMService;
       let promptService: IPromptService;
       let preferenceService: IPreferenceService;
+      let imageModelManager: IImageModelManager | undefined;
+      let imageService: IImageService | undefined;
+      let imageAdapterRegistryInstance: ReturnType<typeof createImageAdapterRegistry> | undefined;
+      let textAdapterRegistryInstance: ITextAdapterRegistry | undefined;
 
       if (isRunningInElectron()) {
         console.log('[AppInitializer] 检测到Electron环境，等待API就绪...');
@@ -71,6 +94,15 @@ export function useAppInitializer() {
         promptService = new ElectronPromptServiceProxy();
         preferenceService = new ElectronPreferenceServiceProxy();
 
+        // 文本模型适配器注册表（本地实例，不需要代理）
+        textAdapterRegistryInstance = createTextAdapterRegistry();
+
+        // 图像相关（Electron 渲染进程代理）
+        const { ElectronImageModelManagerProxy, ElectronImageServiceProxy } = await import('@prompt-optimizer/core')
+        imageAdapterRegistryInstance = createImageAdapterRegistry();
+        imageModelManager = new ElectronImageModelManagerProxy();
+        imageService = new ElectronImageServiceProxy();
+
         // DataManager在Electron环境下使用代理模式
         dataManager = new ElectronDataManagerProxy();
 
@@ -79,6 +111,9 @@ export function useAppInitializer() {
 
         // 创建 CompareService（直接使用，无需代理）
         const compareService = createCompareService();
+
+        // 使用 ElectronContextRepoProxy 代替临时方案
+        const contextRepo = new ElectronContextRepoProxy();
 
         services.value = {
           modelManager,
@@ -90,6 +125,11 @@ export function useAppInitializer() {
           templateLanguageService, // 使用代理而不是null
           preferenceService, // 使用从core包导入的ElectronPreferenceServiceProxy
           compareService, // 直接使用，无需代理
+          contextRepo, // 使用Electron代理
+          textAdapterRegistry: textAdapterRegistryInstance,
+          imageModelManager,
+          imageService,
+          imageAdapterRegistry: imageAdapterRegistryInstance,
         };
         console.log('[AppInitializer] Electron代理服务初始化完成');
 
@@ -105,6 +145,14 @@ export function useAppInitializer() {
         
         // Services with no dependencies or only storage
         const modelManagerInstance = createModelManager(storageProvider);
+
+        // 文本模型适配器注册表（本地实例）
+        textAdapterRegistryInstance = createTextAdapterRegistry();
+
+        // 图像模型管理器（独立存储空间）
+        const imageAdapterRegistry = await import('@prompt-optimizer/core').then(m => m.createImageAdapterRegistry())
+        imageAdapterRegistryInstance = imageAdapterRegistry
+        const imageModelManagerInstance = createImageModelManager(storageProvider, imageAdapterRegistry);
         
         // Initialize language service first, as template manager depends on it
         console.log('[AppInitializer] 初始化语言服务...');
@@ -138,17 +186,11 @@ export function useAppInitializer() {
           enableModel: (key) => modelManagerInstance.enableModel(key),
           disableModel: (key) => modelManagerInstance.disableModel(key),
           getEnabledModels: () => modelManagerInstance.getEnabledModels(),
-        };
-
-        const languageServiceAdapter = {
-          initialize: () => languageService.initialize(),
-          getCurrentLanguage: () => languageService.getCurrentLanguage(),
-          setLanguage: (language: any) => languageService.setLanguage(language),
-          toggleLanguage: () => languageService.toggleLanguage(),
-          isValidLanguage: (language: string) => languageService.isValidLanguage(language),
-          getSupportedLanguages: () => languageService.getSupportedLanguages(),
-          getLanguageDisplayName: (language: any) => languageService.getLanguageDisplayName(language),
-          isInitialized: () => languageService.isInitialized(),
+          // IImportExportable methods
+          exportData: () => modelManagerInstance.exportData(),
+          importData: (data) => modelManagerInstance.importData(data),
+          getDataType: () => modelManagerInstance.getDataType(),
+          validateData: (data) => modelManagerInstance.validateData(data),
         };
 
         const templateManagerAdapter: ITemplateManager = {
@@ -162,6 +204,11 @@ export function useAppInitializer() {
           changeBuiltinTemplateLanguage: (language) => templateManagerInstance.changeBuiltinTemplateLanguage(language),
           getCurrentBuiltinTemplateLanguage: async () => await templateManagerInstance.getCurrentBuiltinTemplateLanguage(),
           getSupportedBuiltinTemplateLanguages: async () => await templateManagerInstance.getSupportedBuiltinTemplateLanguages(),
+          // IImportExportable methods
+          exportData: () => templateManagerInstance.exportData(),
+          importData: (data) => templateManagerInstance.importData(data),
+          getDataType: () => templateManagerInstance.getDataType(),
+          validateData: (data) => templateManagerInstance.validateData(data),
         };
 
         const historyManagerAdapter: IHistoryManager = {
@@ -176,33 +223,56 @@ export function useAppInitializer() {
           createNewChain: (record) => historyManagerInstance.createNewChain(record),
           addIteration: (params) => historyManagerInstance.addIteration(params),
           deleteChain: (id) => historyManagerInstance.deleteChain(id),
+          // IImportExportable methods
+          exportData: () => historyManagerInstance.exportData(),
+          importData: (data) => historyManagerInstance.importData(data),
+          getDataType: () => historyManagerInstance.getDataType(),
+          validateData: (data) => historyManagerInstance.validateData(data),
         };
 
         // Services that depend on initialized managers
         console.log('[AppInitializer] 创建依赖其他管理器的服务...');
         llmService = createLLMService(modelManagerInstance);
         promptService = createPromptService(modelManager, llmService, templateManager, historyManager);
+        imageService = createImageService(imageModelManagerInstance, imageAdapterRegistryInstance);
 
-        dataManager = createDataManager(modelManagerInstance, templateManagerInstance, historyManagerInstance, preferenceService);
+        // Ensure image model defaults are seeded (similar to text models)
+        try {
+          // Optional chaining for backward compatibility
+          await (imageModelManagerInstance as any)?.ensureInitialized?.()
+        } catch (e) {
+          console.warn('[AppInitializer] ImageModelManager ensureInitialized failed (non-critical):', e)
+        }
 
         // 创建 CompareService（直接使用）
         const compareService = createCompareService();
 
+        // 创建 ContextRepo（使用相同的存储提供器）
+        const contextRepo = createContextRepo(storageProvider);
+
+        // 创建 DataManager（需要contextRepo）
+        dataManager = createDataManager(modelManagerInstance, templateManagerInstance, historyManagerInstance, preferenceService, contextRepo);
+
         // 将所有服务实例赋值给 services.value
-      services.value = {
+        services.value = {
           modelManager: modelManagerAdapter, // 使用适配器
           templateManager: templateManagerAdapter, // 使用适配器
           historyManager: historyManagerAdapter, // 使用适配器
-        dataManager,
-        llmService,
-        promptService,
-        templateLanguageService: languageService,
-        preferenceService, // 使用从core包导入的PreferenceService
-        compareService, // 直接使用
-      };
-      }
+          dataManager,
+          llmService,
+          promptService,
+          templateLanguageService: languageService,
+          preferenceService, // 使用从core包导入的PreferenceService
+          compareService, // 直接使用
+          contextRepo, // 上下文仓库
+          textAdapterRegistry: textAdapterRegistryInstance,
+          imageModelManager: imageModelManagerInstance,
+          imageService,
+          imageAdapterRegistry: imageAdapterRegistryInstance,
+        };
 
-      console.log('[AppInitializer] 所有服务初始化完成');
+        console.log('[AppInitializer] 所有服务初始化完成');
+      }
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);

@@ -107,20 +107,6 @@ export function validateCustomModelConfig(config: CustomModelEnvConfig): Validat
   return result;
 }
 
-// 由于我们假定Vercel状态是不可变的，我们只需要知道它是否被检查过以及结果。
-interface VercelStatus {
-  checked: boolean;
-  available: boolean;
-}
-
-// 存储Vercel环境检测结果的缓存
-let vercelStatusCache: VercelStatus = {
-  checked: false,
-  available: false,
-};
-
-const PROXY_URL_KEY = 'proxy-url-status';
-
 /**
  * 检查是否在浏览器环境中
  */
@@ -128,219 +114,41 @@ export const isBrowser = (): boolean => {
   return typeof window !== 'undefined';
 };
 
-/**
- * 异步检查Vercel API是否可用。
- * 实现"只检查一次"的逻辑，假定状态检查后不会改变。
- */
-export async function checkVercelApiAvailability(): Promise<boolean> {
-  // 如果内存缓存中已检查过，直接返回结果。
-  if (vercelStatusCache.checked) {
-    return vercelStatusCache.available;
-  }
-
-  // 兼容Vercel Edge环境
-  if (typeof window === 'undefined') {
-    return false;
-  }
-
-  // 如果在Electron环境中，不需要检测Vercel API
-  if (isRunningInElectron()) {
-    console.log('[Environment Detection] Skipping Vercel API detection in Electron environment');
-    vercelStatusCache = { available: false, checked: true };
-    return false;
-  }
-
-  // 检查localStorage中是否有持久化的结果（页面刷新后依然有效）
-  const cachedStatus = JSON.parse(localStorage.getItem(PROXY_URL_KEY) || 'null');
-  if (cachedStatus && cachedStatus.checked) {
-    vercelStatusCache = cachedStatus;
-    return vercelStatusCache.available;
-  }
-
-  try {
-    const response = await fetch('/api/vercel-status');
-    
-    // 检查响应是否成功并且内容类型是否为JSON
-    const contentType = response.headers.get('content-type');
-    if (response.ok && contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      const isAvailable = data.status === 'available' && data.proxySupport === true;
-    
-      // 更新缓存并持久化
-      vercelStatusCache = { available: isAvailable, checked: true };
-      localStorage.setItem(PROXY_URL_KEY, JSON.stringify(vercelStatusCache));
-    
-      return isAvailable;
-    }else{
-      return false;
-    }
-  } catch (error) {
-    console.log('[Environment Detection] Vercel API detection failed', error);
-  }
-
-  // 检查失败或出错，同样标记为已检查并缓存失败状态
-    vercelStatusCache = { available: false, checked: true };
-  localStorage.setItem(PROXY_URL_KEY, JSON.stringify(vercelStatusCache));
-    return false;
-  }
-
-/**
- * 检查是否在Vercel环境中（同步版本，使用缓存结果）
- */
-export const isVercel = (): boolean => {
-  return vercelStatusCache.checked && vercelStatusCache.available;
-};
-
-/**
- * 重置Vercel状态缓存，主要用于测试
- */
-export const resetVercelStatusCache = (): void => {
-  vercelStatusCache = {
-    checked: false,
-    available: false,
-  };
-  localStorage.removeItem(PROXY_URL_KEY);
-};
-
-// Docker环境检测相关
-interface DockerStatus {
-  checked: boolean;
-  available: boolean;
-}
-
-let dockerStatusCache: DockerStatus = {
-  checked: false,
-  available: false,
-};
-
-const DOCKER_PROXY_URL_KEY = 'docker_proxy_status';
-
-/**
- * 检查Docker API是否可用（简化版）
- */
-export async function checkDockerApiAvailability(): Promise<boolean> {
-  // 如果内存缓存中已检查过，直接返回结果
-  if (dockerStatusCache.checked) {
-    return dockerStatusCache.available;
-  }
-
-  if (typeof window === 'undefined' || isRunningInElectron()) {
-    dockerStatusCache = { available: false, checked: true };
-    return false;
-  }
-
-  // 检查localStorage中是否有持久化的结果
-  const cachedStatus = JSON.parse(localStorage.getItem(DOCKER_PROXY_URL_KEY) || 'null');
-  if (cachedStatus && cachedStatus.checked) {
-    dockerStatusCache = cachedStatus;
-    return dockerStatusCache.available;
-  }
-
-  try {
-    const response = await fetch('/api/docker-status');
-    if (response.ok) {
-      const data = await response.json();
-      const isAvailable = data.status === 'available';
-
-      // 更新缓存并持久化
-      dockerStatusCache = { available: isAvailable, checked: true };
-      localStorage.setItem(DOCKER_PROXY_URL_KEY, JSON.stringify(dockerStatusCache));
-
-      return isAvailable;
-    }
-  } catch (error) {
-    console.log('[Environment Detection] Docker API detection failed', error);
-  }
-
-  // 检查失败或出错，标记为已检查并缓存失败状态
-  dockerStatusCache = { available: false, checked: true };
-  localStorage.setItem(DOCKER_PROXY_URL_KEY, JSON.stringify(dockerStatusCache));
-  return false;
-}
-
-/**
- * 检查是否在Docker环境中（同步版本，使用缓存结果）
- */
-export const isDocker = (): boolean => {
-  return dockerStatusCache.checked && dockerStatusCache.available;
-};
-
-/**
- * 重置Docker状态缓存，主要用于测试
- */
-export const resetDockerStatusCache = (): void => {
-  dockerStatusCache = {
-    checked: false,
-    available: false,
-  };
-  localStorage.removeItem(DOCKER_PROXY_URL_KEY);
-};
-
-/**
- * 获取API代理URL
- * @param baseURL 原始基础URL
- * @param isStream 是否是流式请求
- */
-export const getProxyUrl = (baseURL: string | undefined, isStream: boolean = false): string => {
-  if (!baseURL) {
-    return '';
-  }
-
-  // 获取当前域名作为基础URL
-  let origin = '';
-  if (isBrowser()) {
-    origin = window.location.origin;
-  } else {
-    // 在Node.js环境中（如Electron主进程），使用空字符串作为基础URL
-    // 避免硬编码特定端口，因为不同环境可能使用不同端口
-    origin = '';
-  }
-
-  const proxyEndpoint = isStream ? 'stream' : 'proxy';
-
-  // 返回完整的绝对URL
-  return `${origin}/api/${proxyEndpoint}?targetUrl=${encodeURIComponent(baseURL)}`;
-};
 
 /**
  * 检测是否在Electron环境中运行
- * 使用多重检测机制确保准确性
+ * 优先使用环境变量VITE_APP_PLATFORM，然后使用自动检测机制
  */
 export function isRunningInElectron(): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
 
-  // 检查多个Electron特征
+  // 第一步：检查环境变量（最高优先级）
+  const platformEnv = getEnvVar('VITE_APP_PLATFORM');
+  if (platformEnv) {
+    console.log('[isRunningInElectron] Using platform from env:', platformEnv);
+    return platformEnv === 'electron';
+  }
+
+  // 自动检测：优先检查electronAPI
   const hasElectronAPI = typeof (window as any).electronAPI !== 'undefined';
-  const hasElectronProcess = typeof (window as any).process !== 'undefined' &&
-                            (window as any).process?.type === 'renderer';
-  const hasElectronRequire = typeof (window as any).require !== 'undefined';
-  const userAgent = window.navigator?.userAgent?.toLowerCase() || '';
-  const hasElectronUserAgent = userAgent.includes('electron');
-
-  console.log('[isRunningInElectron] Detection details:', {
-    hasElectronAPI,
-    hasElectronProcess,
-    hasElectronRequire,
-    hasElectronUserAgent,
-    userAgent,
-  });
-
-  // 如果有electronAPI，肯定是Electron
   if (hasElectronAPI) {
     console.log('[isRunningInElectron] Verdict: true (via electronAPI)');
     return true;
   }
 
-  // 如果有其他Electron特征，也认为是Electron（可能是preload脚本还没执行完）
-  if (hasElectronProcess || hasElectronRequire || hasElectronUserAgent) {
-    console.warn('[Environment] Detected Electron environment but electronAPI not available yet');
-    console.log(`[isRunningInElectron] Verdict: true (via fallback checks: process=${hasElectronProcess}, require=${hasElectronRequire}, userAgent=${hasElectronUserAgent})`);
+  // 后备检测：检查更严格的Electron特征
+  const hasValidElectronProcess = typeof (window as any).process !== 'undefined' &&
+                                 (window as any).process?.type === 'renderer' &&
+                                 (window as any).process?.versions?.electron;
+
+  if (hasValidElectronProcess) {
+    console.log('[isRunningInElectron] Verdict: true (via process.versions.electron)');
     return true;
   }
 
-  console.log('[isRunningInElectron] Verdict: false');
+  console.log('[isRunningInElectron] Verdict: false (no Electron features detected)');
   return false;
 }
 
