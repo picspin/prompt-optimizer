@@ -1,3 +1,20 @@
+/*
+ * Prompt Optimizer - AI提示词优化工具
+ * Copyright (C) 2025 linshenkx
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // 在所有其他模块之前初始化日志系统
 const ConsoleLogger = require('./config/console-logger');
 const consoleLogger = new ConsoleLogger();
@@ -47,6 +64,7 @@ const {
   createTemplateLanguageService,
   createDataManager,
   createContextRepo,
+  FavoriteManager,
   FileStorageProvider,
   // 导入共享的环境变量扫描常量
   CUSTOM_API_PATTERN,
@@ -81,7 +99,7 @@ function safeSerialize(obj) {
 }
 
 let mainWindow;
-let modelManager, templateManager, historyManager, llmService, promptService, templateLanguageService, preferenceService, dataManager, contextRepo;
+let modelManager, templateManager, historyManager, llmService, promptService, templateLanguageService, preferenceService, dataManager, contextRepo, favoriteManager;
 let imageModelManager, imageService;
 let imageAdapterRegistry; // 全局引用以供 IPC 处理器使用
 let storageProvider; // 全局存储提供器引用，用于退出时保存数据
@@ -509,6 +527,9 @@ async function initializeServices() {
 
     console.log('[DESKTOP] Creating Data manager...');
     dataManager = createDataManager(modelManager, templateManager, historyManager, preferenceService, contextRepo);
+
+    console.log('[DESKTOP] Creating Favorite manager...');
+    favoriteManager = new FavoriteManager(storageProvider);
     
     console.log('[Main Process] Core services initialized successfully.');
     
@@ -596,6 +617,37 @@ function createDetailedErrorResponse(error) {
   console.error('[Detailed Error Info]', detailedMessage);
 
   return { success: false, error: detailedMessage };
+}
+
+function formatFavoriteError(error) {
+  if (!error || typeof error !== 'object') {
+    return { message: String(error || 'Unknown error'), code: 'UNKNOWN_ERROR' };
+  }
+
+  const formatted = {
+    message: error.message || 'Unknown error',
+    code: error.code || 'UNKNOWN_ERROR',
+    name: error.name || 'Error'
+  };
+
+  if (error.details) {
+    formatted.details = error.details;
+  }
+
+  if (error.cause) {
+    formatted.cause = {
+      message: error.cause.message || String(error.cause),
+      code: error.cause.code,
+      name: error.cause.name
+    };
+  }
+
+  return formatted;
+}
+
+function createFavoriteErrorResponse(error) {
+  console.error('[Favorite IPC Error]', error);
+  return { success: false, error: formatFavoriteError(error) };
 }
 
 // --- High-Level IPC Service Handlers ---
@@ -1381,9 +1433,10 @@ function setupIPC() {
     }
   });
 
-  ipcMain.handle('context-duplicate', async (event, id) => {
+  ipcMain.handle('context-duplicate', async (event, id, options) => {
     try {
-      const result = await contextRepo.duplicate(id);
+      const safeOptions = options ? safeSerialize(options) : undefined;
+      const result = await contextRepo.duplicate(id, safeOptions);
       return createSuccessResponse(result);
     } catch (error) {
       return createErrorResponse(error);
@@ -1482,6 +1535,227 @@ function setupIPC() {
       return createSuccessResponse(result);
     } catch (error) {
       return createErrorResponse(error);
+    }
+  });
+
+  // Favorite Manager handlers
+  ipcMain.handle('favorite-addFavorite', async (event, favorite) => {
+    try {
+      const safeFavorite = safeSerialize(favorite);
+      const result = await favoriteManager.addFavorite(safeFavorite);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-getFavorites', async (event, options) => {
+    try {
+      const safeOptions = safeSerialize(options);
+      const result = await favoriteManager.getFavorites(safeOptions || undefined);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-getFavorite', async (event, id) => {
+    try {
+      const result = await favoriteManager.getFavorite(id);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-updateFavorite', async (event, id, updates) => {
+    try {
+      const safeUpdates = safeSerialize(updates);
+      await favoriteManager.updateFavorite(id, safeUpdates);
+      return createSuccessResponse(null);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-deleteFavorite', async (event, id) => {
+    try {
+      await favoriteManager.deleteFavorite(id);
+      return createSuccessResponse(null);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-deleteFavorites', async (event, ids) => {
+    try {
+      const safeIds = safeSerialize(ids);
+      await favoriteManager.deleteFavorites(safeIds);
+      return createSuccessResponse(null);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-incrementUseCount', async (event, id) => {
+    try {
+      await favoriteManager.incrementUseCount(id);
+      return createSuccessResponse(null);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-getCategories', async () => {
+    try {
+      const result = await favoriteManager.getCategories();
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-addCategory', async (event, category) => {
+    try {
+      const safeCategory = safeSerialize(category);
+      const result = await favoriteManager.addCategory(safeCategory);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-updateCategory', async (event, id, updates) => {
+    try {
+      const safeUpdates = safeSerialize(updates);
+      await favoriteManager.updateCategory(id, safeUpdates);
+      return createSuccessResponse(null);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-deleteCategory', async (event, id) => {
+    try {
+      const result = await favoriteManager.deleteCategory(id);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-getStats', async () => {
+    try {
+      const result = await favoriteManager.getStats();
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-searchFavorites', async (event, keyword, options) => {
+    try {
+      const safeOptions = safeSerialize(options);
+      const result = await favoriteManager.searchFavorites(keyword, safeOptions || undefined);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-exportFavorites', async (event, ids) => {
+    try {
+      const safeIds = safeSerialize(ids);
+      const result = await favoriteManager.exportFavorites(safeIds || undefined);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-importFavorites', async (event, data, options) => {
+    try {
+      const safeData = typeof data === 'string' ? data : safeSerialize(data);
+      const safeOptions = safeSerialize(options);
+      const result = await favoriteManager.importFavorites(safeData, safeOptions || undefined);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-getAllTags', async () => {
+    try {
+      const result = await favoriteManager.getAllTags();
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-addTag', async (event, tag) => {
+    try {
+      await favoriteManager.addTag(tag);
+      return createSuccessResponse(null);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-renameTag', async (event, oldTag, newTag) => {
+    try {
+      const result = await favoriteManager.renameTag(oldTag, newTag);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-mergeTags', async (event, sourceTags, targetTag) => {
+    try {
+      const safeSourceTags = safeSerialize(sourceTags);
+      const result = await favoriteManager.mergeTags(safeSourceTags, targetTag);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-deleteTag', async (event, tag) => {
+    try {
+      const result = await favoriteManager.deleteTag(tag);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-reorderCategories', async (event, categoryIds) => {
+    try {
+      const safeCategoryIds = safeSerialize(categoryIds);
+      await favoriteManager.reorderCategories(safeCategoryIds);
+      return createSuccessResponse(null);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-getCategoryUsage', async (event, categoryId) => {
+    try {
+      const result = await favoriteManager.getCategoryUsage(categoryId);
+      return createSuccessResponse(result);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
+    }
+  });
+
+  ipcMain.handle('favorite-ensureDefaultCategories', async (event, defaultCategories) => {
+    try {
+      const safeCategories = safeSerialize(defaultCategories);
+      await favoriteManager.ensureDefaultCategories(safeCategories);
+      return createSuccessResponse(null);
+    } catch (error) {
+      return createFavoriteErrorResponse(error);
     }
   });
 

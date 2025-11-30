@@ -181,12 +181,13 @@
 
 <script setup lang="ts">
 import { ref, computed, inject, onMounted, onUnmounted, type Ref } from 'vue'
+
 import { useI18n } from 'vue-i18n'
 import { 
   NModal, NSpace, NText, NButton, NUpload, NUploadDragger, 
   NIcon, NAlert, type UploadFileInfo 
 } from 'naive-ui'
-import { useToast } from '../composables/useToast'
+import { useToast } from '../composables/ui/useToast'
 import type { AppServices } from '../types/services'
 
 interface Props {
@@ -454,7 +455,7 @@ const handleContextImportFromFile = async (file: File) => {
     const content = await file.text()
     
     // 解析JSON数据
-    let importData: any
+    let importData: unknown
     try {
       importData = JSON.parse(content)
     } catch (parseError) {
@@ -516,7 +517,7 @@ const handleContextImportFromClipboard = async () => {
     }
     
     // 解析JSON数据
-    let importData: any
+    let importData: unknown
     try {
       importData = JSON.parse(clipboardContent)
     } catch (parseError) {

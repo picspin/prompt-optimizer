@@ -22,6 +22,7 @@
     @edit-end="emit('edit-end')"
     @reasoning-toggle="emit('reasoning-toggle', $event)"
     @view-change="emit('view-change', $event)"
+    @save-favorite="emit('save-favorite', $event)"
   />
   <OutputDisplayFullscreen
     v-model="isShowingFullscreen"
@@ -41,7 +42,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, inject, type Ref } from 'vue';
+import { computed, ref, inject, type Ref } from 'vue'
+
 import OutputDisplayCore from './OutputDisplayCore.vue';
 import OutputDisplayFullscreen from './OutputDisplayFullscreen.vue';
 import type { AppServices } from '../types/services';
@@ -50,7 +52,7 @@ defineOptions({
   inheritAttrs: false,
 });
 
-type ActionName = 'fullscreen' | 'diff' | 'copy' | 'edit' | 'reasoning'
+type ActionName = 'fullscreen' | 'diff' | 'copy' | 'edit' | 'reasoning' | 'favorite'
 
 // Props
 interface Props {
@@ -64,6 +66,7 @@ interface Props {
   enableFullscreen?: boolean // Mapped to enabledActions
   enableEdit?: boolean // Mapped to enabledActions
   enableDiff?: boolean // Mapped to enabledActions
+  enableFavorite?: boolean // Mapped to enabledActions
   height?: string | number
   placeholder?: string
   loading?: boolean
@@ -75,6 +78,7 @@ const props = withDefaults(defineProps<Props>(), {
     enableFullscreen: true,
     enableEdit: true,
     enableDiff: true,
+    enableFavorite: true,
 });
 
 // Emits
@@ -88,6 +92,7 @@ const emit = defineEmits<{
   'reasoning-toggle': [expanded: boolean]
   'view-change': [mode: 'base' | 'diff']
   'reasoning-auto-hide': []
+  'save-favorite': [data: { content: string; originalContent?: string }]
 }>()
 
 const isShowingFullscreen = ref(false);
@@ -118,6 +123,7 @@ const enabledActions = computed(() => {
     if (props.enableDiff) actions.push('diff');
     if (props.enableCopy) actions.push('copy');
     if (props.enableEdit) actions.push('edit');
+    if (props.enableFavorite) actions.push('favorite');
     return actions;
 })
 

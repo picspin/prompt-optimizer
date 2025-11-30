@@ -1,3 +1,5 @@
+import { type Ref } from 'vue'
+
 import type {
   IModelManager,
   ITemplateManager,
@@ -12,7 +14,9 @@ import type {
   IImageModelManager,
   IImageService,
   IImageAdapterRegistry,
-  ITextAdapterRegistry
+  ITextAdapterRegistry,
+  IFavoriteManager,
+  ContextMode
 } from '@prompt-optimizer/core'
 
 /**
@@ -29,6 +33,9 @@ export interface AppServices {
   preferenceService: IPreferenceService;
   compareService: ICompareService;
   contextRepo: ContextRepo;
+  favoriteManager: IFavoriteManager;
+  // 🆕 上下文模式（响应式，用于 UI 行为决策）
+  contextMode: Ref<ContextMode>;
   // 文本模型适配器注册表（本地实例）
   textAdapterRegistry?: ITextAdapterRegistry;
   // 图像相关（Web 优先，可选）

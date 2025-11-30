@@ -4,18 +4,17 @@
  */
 
 import type {
-  VariableDefinition,
   ConversationMessage,
   ToolDefinition,
   ToolCallResult,
-  ApplyToTestData,
   AdvancedTestResult,
   ContextEditorState,
   ComponentVisibility,
-  AdvancedModuleState,
   VariableImportOptions,
   VariableExportData
 } from '@prompt-optimizer/core'
+import type { AppServices } from '../types/services'
+import type { VariableManagerHooks } from '../composables/prompt/useVariableManager'
 
 /**
  * 基础组件 Props 接口
@@ -86,6 +85,8 @@ export interface ConversationManagerProps extends BaseComponentProps {
   availableVariables: Record<string, string>
   /** 优化模式（用于模板分类） */
   optimizationMode?: 'system' | 'user'
+  /** 上下文模式（用于控制UI行为） */
+  contextMode?: import('@prompt-optimizer/core').ContextMode
   /** 变量扫描函数（标准化注入） */
   scanVariables?: (content: string) => string[]
   /** 变量替换函数（标准化注入） */
@@ -127,14 +128,18 @@ export interface ContextEditorProps extends BaseComponentProps {
   visible: boolean
   /** 编辑器状态 */
   state?: ContextEditorState
-  /** 可用变量集合（全局变量，用于缺失检测和预览） */
-  availableVariables?: Record<string, string>
+  /** 服务实例（用于变量管理） */
+  services?: AppServices | null
+  /** 变量管理器实例（必需，用于数据同步，与全局变量管理器共享） */
+  variableManager: VariableManagerHooks
   /** 是否显示工具管理标签页 */
   showToolManager?: boolean
   /** 工具列表 */
   tools?: ToolDefinition[]
   /** 优化模式（用于模板分类） */
   optimizationMode?: 'system' | 'user'
+  /** 上下文模式（用于控制UI行为） */
+  contextMode?: import('@prompt-optimizer/core').ContextMode
   /** 变量扫描函数（标准化注入） */
   scanVariables: (content: string) => string[]
   /** 变量替换函数（标准化注入） */
@@ -147,6 +152,10 @@ export interface ContextEditorProps extends BaseComponentProps {
   width?: number | string
   /** 弹窗高度 */
   height?: number | string
+  /** 默认激活的标签页 */
+  defaultTab?: 'messages' | 'variables' | 'tools'
+  /** 仅显示指定标签页（隐藏其他标签页和标签栏） */
+  onlyShowTab?: 'messages' | 'variables' | 'tools' | 'templates'
 }
 
 export interface ContextEditorEvents extends BaseComponentEvents {
@@ -293,7 +302,7 @@ export interface AdvancedModuleConfig {
 /**
  * 组件通信数据格式
  */
-export interface ComponentMessage<T = any> {
+export interface ComponentMessage<T = unknown> {
   /** 消息类型 */
   type: string
   /** 消息负载 */
@@ -315,7 +324,7 @@ export interface ComponentError {
   /** 错误消息 */
   message: string
   /** 错误详情 */
-  details?: any
+  details?: unknown
   /** 发生错误的组件 */
   component: string
   /** 错误时间 */

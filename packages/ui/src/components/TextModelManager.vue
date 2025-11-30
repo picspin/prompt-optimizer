@@ -13,7 +13,6 @@
 
     <TextModelEditModal
       :show="showEditModal"
-      :config-id="editingModelId || ''"
       @update:show="updateEditModalVisibility"
       @saved="handleModelUpdated"
     />
@@ -22,8 +21,9 @@
 
 <script setup lang="ts">
 import { onMounted, provide, ref } from 'vue'
+
 import { useI18n } from 'vue-i18n'
-import { useTextModelManager } from '../composables/useTextModelManager'
+import { useTextModelManager } from '../composables/model/useTextModelManager'
 import TextModelList from './TextModelList.vue'
 import TextModelEditModal from './TextModelEditModal.vue'
 

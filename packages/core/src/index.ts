@@ -1,3 +1,20 @@
+/*
+ * Prompt Optimizer - AI提示词优化工具
+ * Copyright (C) 2025 linshenkx
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 // Core package entry point
 
 // 导出模板相关
@@ -143,6 +160,13 @@ export * from './services/context/types'
 export { createContextRepo } from './services/context/repo'
 export { ElectronContextRepoProxy } from './services/context/electron-proxy'
 export * from './services/context/constants'
+
+// 导出收藏管理相关
+export { FavoriteManager } from './services/favorite/manager'
+export { FavoriteManagerElectronProxy } from './services/favorite/electron-proxy'
+export { TagTypeConverter } from './services/favorite/type-converter'
+export * from './services/favorite/types'
+export * from './services/favorite/errors'
 
 // 导出高级模块相关类型
 export * from './types/advanced'

@@ -181,13 +181,14 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, type PropType } from 'vue'
+
 import { useI18n } from 'vue-i18n'
 import {
   NModal, NScrollbar, NSpace, NCard, NText, NTag, NButton, 
   NDivider, NCollapse, NCollapseItem, NEmpty
 } from 'naive-ui'
 import type { PromptRecord, PromptRecordChain } from '@prompt-optimizer/core'
-import { useToast } from '../composables/useToast'
+import { useToast } from '../composables/ui/useToast'
 
 const props = defineProps({
   show: Boolean,

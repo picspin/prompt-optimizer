@@ -30,12 +30,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, inject } from 'vue'
+import { ref, computed, watch, inject, type Ref } from 'vue'
+
 import { useI18n } from 'vue-i18n'
 import { NSelect, NButton, NSpace, NText } from 'naive-ui'
-import type { OptimizationMode, ITemplateManager, Template, TemplateMetadata } from '@prompt-optimizer/core'
+import type { OptimizationMode, Template, TemplateMetadata } from '@prompt-optimizer/core'
 import type { AppServices } from '../types/services'
-import type { Ref } from 'vue'
 
 const { t } = useI18n()
 
@@ -161,7 +161,7 @@ const loadTemplatesByType = async () => {
   }
 
   // 统一使用异步方法，立即抛错不静默处理
-  const typeTemplates = await templateManager.value.listTemplatesByType(props.type as any)
+  const typeTemplates = await templateManager.value.listTemplatesByType(props.type)
   templates.value.splice(0, templates.value.length, ...typeTemplates)
 }
 
@@ -230,7 +230,7 @@ watch(
  * 支持 string 和 Array<{role: string; content: string}> 两种类型
  * 修复 BugBot 发现的数组引用比较问题
  */
-const deepCompareTemplateContent = (content1: any, content2: any): boolean => {
+const deepCompareTemplateContent = (content1: string | Array<{role: string; content: string}>, content2: string | Array<{role: string; content: string}>): boolean => {
   // 类型相同性检查
   if (typeof content1 !== typeof content2) {
     return false

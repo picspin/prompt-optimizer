@@ -90,12 +90,14 @@
 
 <script setup lang="ts">
 import { inject, onMounted, onUnmounted, provide, ref } from 'vue'
+
 import { useI18n } from 'vue-i18n'
 import { NButton, NModal, NScrollbar, NTabs, NTabPane } from 'naive-ui'
 import ImageModelEditModal from './ImageModelEditModal.vue'
 import ImageModelManager from './ImageModelManager.vue'
 import TextModelManager from './TextModelManager.vue'
 import ToastUI from './Toast.vue'
+import type { AppServices } from '../types/services'
 
 defineProps({
   show: {
@@ -109,12 +111,12 @@ const emit = defineEmits(['modelsUpdated', 'close', 'select', 'update:show'])
 const { t } = useI18n()
 
 const activeTab = ref<'text' | 'image'>('text')
-const textManagerRef = ref<any>(null)
-const imageListRef = ref<any>(null)
+const textManagerRef = ref<InstanceType<typeof TextModelManager> | null>(null)
+const imageListRef = ref<InstanceType<typeof ImageModelManager> | null>(null)
 const showImageModelEdit = ref(false)
 const editingImageModelId = ref<string | undefined>(undefined)
 
-const services = inject<any>('services')
+const services = inject<AppServices>('services')
 if (!services) {
   throw new Error('Services not provided!')
 }
@@ -157,7 +159,9 @@ const handleImageModelSaved = () => {
   editingImageModelId.value = undefined
   try {
     imageListRef.value?.refresh?.()
-  } catch {}
+  } catch {
+      // 静默处理错误
+    }
 }
 
 if (typeof window !== 'undefined') {
@@ -165,7 +169,9 @@ if (typeof window !== 'undefined') {
     try {
       const tab = (e as CustomEvent).detail
       if (tab === 'text' || tab === 'image') activeTab.value = tab
-    } catch {}
+    } catch {
+      // 静默处理错误
+    }
   }
   onMounted(() => window.addEventListener('model-manager:set-tab', tabHandler))
   onUnmounted(() => window.removeEventListener('model-manager:set-tab', tabHandler))

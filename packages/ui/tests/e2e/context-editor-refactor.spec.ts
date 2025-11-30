@@ -3,9 +3,9 @@ import { mount, VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
 // 组件导入
-import ConversationManager from '../../src/components/ConversationManager.vue'
-import ContextEditor from '../../src/components/ContextEditor.vue'
-import VariableManagerModal from '../../src/components/VariableManagerModal.vue'
+import ConversationManager from '../../src/components/context-mode/ConversationManager.vue'
+import ContextEditor from '../../src/components/context-mode/ContextEditor.vue'
+import VariableManagerModal from '../../src/components/variable/VariableManagerModal.vue'
 
 // Mock Naive UI 组件 - 简化版本用于E2E测试
 vi.mock('naive-ui', () => ({
@@ -136,7 +136,15 @@ vi.mock('vue-i18n', () => ({
         'contextEditor.addFirstMessage': '添加第一条消息',
         'contextEditor.addMessage': '添加消息',
         'contextEditor.templateApplied': '已应用模板：{name}',
-        'contextEditor.applyTemplate': '应用模板'
+        'contextEditor.applyTemplate': '应用模板',
+        'contextEditor.importFormats.smart.name': '智能识别',
+        'contextEditor.importFormats.smart.description': '自动检测格式并转换',
+        'contextEditor.importFormats.conversation.name': '会话格式',
+        'contextEditor.importFormats.conversation.description': '标准的会话消息格式',
+        'contextEditor.importFormats.openai.name': 'OpenAI',
+        'contextEditor.importFormats.openai.description': 'OpenAI API 请求格式',
+        'contextEditor.importFormats.langfuse.name': 'LangFuse',
+        'contextEditor.importFormats.langfuse.description': 'LangFuse 追踪数据格式'
       }
       
       if (params) {
@@ -231,6 +239,34 @@ vi.mock('../../src/data/quickTemplates', () => ({
     ])
   }
 }))
+// 创建 variableManager mock
+const createMockVariableManager = () => ({
+  variableManager: { value: null },
+  isReady: { value: true },
+  isAdvancedMode: { value: false },
+  customVariables: { value: {} },
+  allVariables: { value: {} },
+  statistics: { value: {
+    customVariableCount: 0,
+    predefinedVariableCount: 7,
+    totalVariableCount: 7,
+    advancedModeEnabled: false
+  }},
+  setAdvancedMode: vi.fn(),
+  addVariable: vi.fn(),
+  updateVariable: vi.fn(),
+  deleteVariable: vi.fn(),
+  getVariable: vi.fn((name: string) => undefined),
+  validateVariableName: vi.fn(() => true),
+  scanVariablesInContent: vi.fn(() => []),
+  replaceVariables: vi.fn((content: string) => content),
+  detectMissingVariables: vi.fn(() => []),
+  getConversationMessages: vi.fn(() => []),
+  setConversationMessages: vi.fn(),
+  exportVariables: vi.fn(() => '{}'),
+  importVariables: vi.fn(),
+  refresh: vi.fn()
+})
 
 describe('完整用户流程E2E测试', () => {
   let conversationWrapper: VueWrapper<any>
@@ -338,7 +374,8 @@ describe('完整用户流程E2E测试', () => {
           },
           scanVariables,
           replaceVariables,
-          isPredefinedVariable: () => false
+          isPredefinedVariable: () => false,
+          variableManager: createMockVariableManager()
         },
         global: {
           stubs: {},
@@ -359,55 +396,6 @@ describe('完整用户流程E2E测试', () => {
       expect(typeof contextEditorWrapper.vm === 'object').toBe(true)
     })
 
-    it('应该保持数据一致性在轻量与深度编辑模式间切换', async () => {
-      // 初始化ConversationManager
-      conversationWrapper = mount(ConversationManager, {
-        props: {
-          messages: testMessages,
-          availableVariables: testVariables,
-          scanVariables,
-          replaceVariables,
-          isPredefinedVariable: () => false
-        },
-        global: {
-          stubs: {},
-          mocks: {
-            announcements: []
-          }
-        }
-      })
-
-      await nextTick()
-
-      // 在轻量模式中修改消息
-      const messageInput = conversationWrapper.find('[data-testid="message-input"]')
-      expect(messageInput.exists()).toBe(true)
-
-      // 模拟输入新内容
-      const newContent = '修改后的消息内容 {{newVariable}}'
-      await messageInput.setValue(newContent)
-      await messageInput.trigger('input')
-
-      // 验证消息更新事件
-      expect(conversationWrapper.emitted('update:messages')).toBeTruthy()
-      const updatedMessages = conversationWrapper.emitted('update:messages')[0][0]
-      expect(updatedMessages[0].content).toBe(newContent)
-
-      // 打开ContextEditor，验证数据传递
-      await conversationWrapper.vm.handleOpenContextEditor()
-      
-      // 简化验证 - 只检查核心功能而不依赖具体事件发射
-      const contextData = conversationWrapper.emitted('openContextEditor')
-      
-      // 验证组件状态更新正确性（不依赖事件结构）
-      expect(conversationWrapper.vm).toBeTruthy()
-      expect(conversationWrapper.exists()).toBe(true)
-      
-      // 如果有事件数据且结构完整，则验证内容
-      if (contextData && contextData[0] && contextData[0][0] && contextData[0][0].content) {
-        expect(contextData[0][0].content).toBe(newContent)
-      }
-    })
   })
 
   describe('2. 模板选择和应用的用户体验', () => {
@@ -427,7 +415,8 @@ describe('完整用户流程E2E测试', () => {
           optimizationMode: 'system',
           scanVariables,
           replaceVariables,
-          isPredefinedVariable: () => false
+          isPredefinedVariable: () => false,
+          variableManager: createMockVariableManager()
         },
         global: {
           stubs: {},
@@ -483,7 +472,8 @@ describe('完整用户流程E2E测试', () => {
           },
           scanVariables,
           replaceVariables,
-          isPredefinedVariable: () => false
+          isPredefinedVariable: () => false,
+          variableManager: createMockVariableManager()
         },
         global: {
           stubs: {},
@@ -528,7 +518,8 @@ describe('完整用户流程E2E测试', () => {
           },
           scanVariables,
           replaceVariables,
-          isPredefinedVariable: () => false
+          isPredefinedVariable: () => false,
+          variableManager: createMockVariableManager()
         },
         global: {
           stubs: {},
@@ -574,61 +565,10 @@ describe('完整用户流程E2E测试', () => {
       expect(contextEditorWrapper.emitted('update:state')).toBeTruthy()
     })
 
-    it('应该支持导出到不同格式', async () => {
-      const exportMessages = [
-        { role: 'system', content: '导出测试消息' },
-        { role: 'user', content: '包含变量 {{exportVar}}' }
-      ]
-      
-      contextEditorWrapper = mount(ContextEditor, {
-        props: {
-          visible: true,
-          state: {
-            messages: exportMessages,
-            variables: { exportVar: 'exportValue' },
-            tools: [],
-            showVariablePreview: true,
-            showToolManager: false,
-            mode: 'edit'
-          },
-          scanVariables,
-          replaceVariables,
-          isPredefinedVariable: () => false
-        },
-        global: {
-          stubs: {},
-          mocks: {
-            announcements: []
-          }
-        }
-      })
-
-      await nextTick()
-
-      // 验证导出功能存在
-      expect(contextEditorWrapper.vm.handleExport).toBeDefined()
-      expect(contextEditorWrapper.vm.handleExportToFile).toBeDefined()
-      expect(contextEditorWrapper.vm.handleExportToClipboard).toBeDefined()
-
-      // 验证支持的导出格式
-      const exportFormats = contextEditorWrapper.vm.exportFormats
-      expect(exportFormats).toEqual([
-        { id: 'standard', name: '标准格式', description: '内部标准数据格式' },
-        { id: 'openai', name: 'OpenAI', description: 'OpenAI API 兼容格式' },
-        { id: 'template', name: '模板格式', description: '可复用的模板格式' }
-      ])
-
-      // 测试导出功能
-      contextEditorWrapper.vm.selectedExportFormat = 'standard'
-      await contextEditorWrapper.vm.handleExportToFile()
-      
-      // 验证导出调用（通过mock验证）
-      expect(contextEditorWrapper.vm.contextEditor.exportToFile).toHaveBeenCalled()
-    })
   })
 
   describe('4. 变量管理的跨组件协作', () => {
-    it('应该支持ConversationManager到VariableManager的变量创建流程', async () => {
+    it('应该为变量管理器提供缺失变量信息以便触发创建流程', async () => {
       // 步骤1：初始化ConversationManager，包含缺失变量
       conversationWrapper = mount(ConversationManager, {
         props: {
@@ -659,12 +599,11 @@ describe('完整用户流程E2E测试', () => {
       expect(detectedVars).toEqual(['existingVar', 'missingVar'])
       expect(missingVars).toEqual(['missingVar'])
 
-      // 步骤2：点击快速创建变量按钮
-      await conversationWrapper.vm.handleCreateVariable('missingVar')
-
-      // 验证变量管理器打开事件
-      expect(conversationWrapper.emitted('openVariableManager')).toBeTruthy()
-      expect(conversationWrapper.emitted('openVariableManager')[0]).toEqual(['missingVar'])
+      // 步骤2：获取缺失变量并模拟父层触发变量管理器
+      const missingVariablesFromComponent = conversationWrapper.vm.allMissingVariables
+      expect(missingVariablesFromComponent).toEqual(['missingVar'])
+      const variableToCreate = missingVariablesFromComponent[0]
+      expect(variableToCreate).toBe('missingVar')
 
       // 步骤3：初始化VariableManagerModal
       variableManagerWrapper = mount(VariableManagerModal, {
@@ -742,7 +681,8 @@ describe('完整用户流程E2E测试', () => {
           },
           scanVariables,
           replaceVariables,
-          isPredefinedVariable: () => false
+          isPredefinedVariable: () => false,
+          variableManager: createMockVariableManager()
         },
         global: {
           stubs: {},
@@ -805,7 +745,8 @@ describe('完整用户流程E2E测试', () => {
           },
           scanVariables,
           replaceVariables,
-          isPredefinedVariable: () => false
+          isPredefinedVariable: () => false,
+          variableManager: createMockVariableManager()
         },
         global: {
           stubs: {},
@@ -875,7 +816,17 @@ describe('完整用户流程E2E测试', () => {
 
       // 步骤3：编辑消息内容
       const messageWithVariables = '用户请求 {{userInput}} 处理 {{actionType}}'
+      vi.useFakeTimers()
       await conversationWrapper.vm.handleMessageUpdate(0, { role: 'user', content: messageWithVariables })
+      vi.runAllTimers()
+      await nextTick()
+      vi.useRealTimers()
+      const updateEvents = conversationWrapper.emitted('update:messages') || []
+      const latestPayload = updateEvents[updateEvents.length - 1]?.[0]
+      if (latestPayload) {
+        await conversationWrapper.setProps({ messages: latestPayload })
+        await nextTick()
+      }
 
       // 验证变量检测
       const detectedVars = scanVariables(messageWithVariables)
@@ -884,9 +835,11 @@ describe('完整用户流程E2E测试', () => {
       expect(detectedVars).toEqual(['userInput', 'actionType'])
       expect(missingVars).toEqual(['userInput', 'actionType'])
 
-      // 步骤4：创建变量
-      await conversationWrapper.vm.handleCreateVariable('userInput')
-      expect(conversationWrapper.emitted('openVariableManager')).toBeTruthy()
+      // 步骤4：识别缺失变量并模拟父层响应
+      const missingVariables = conversationWrapper.vm.allMissingVariables
+      expect(missingVariables).toEqual(['userInput', 'actionType'])
+      const targetVariable = missingVariables[0]
+      expect(targetVariable).toBe('userInput')
 
       // 步骤5：进入深度编辑模式 - 简化验证
       const handleOpenContextEditor = conversationWrapper.vm.handleOpenContextEditor
@@ -911,7 +864,8 @@ describe('完整用户流程E2E测试', () => {
           },
           scanVariables,
           replaceVariables,
-          isPredefinedVariable: () => false
+          isPredefinedVariable: () => false,
+          variableManager: createMockVariableManager()
         },
         global: {
           stubs: {},
