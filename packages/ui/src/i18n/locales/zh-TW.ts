@@ -57,6 +57,8 @@ export default {
     iterate: "迭代",
     system: "系統",
     user: "使用者",
+    basic: "基礎",
+    context: "上下文",
     copySuccess: "複製成功",
     copyFailed: "複製失敗",
     appName: "提示詞優化器",
@@ -119,13 +121,18 @@ export default {
     imageMode: "圖像",
   },
   contextMode: {
+    optimizationMode: {
+      message: "多訊息",
+      variable: "變數",
+    },
     user: {
-      label: "用戶模式",
+      label: "變數模式",
       tooltip: "優化單條用戶提示詞，專注於變數和工具配置",
     },
     system: {
-      label: "系統模式",
+      label: "多訊息模式",
       tooltip: "優化多條系統訊息，支援完整的對話管理",
+      selectMessageHint: "請選擇一條 system/user 訊息以查看 V0/V1 結果",
     },
     actions: {
       globalVariables: "全局變數",
@@ -164,7 +171,7 @@ export default {
       add: "新增",
       emptySearchResult: "沒有找到相符的收藏",
       emptyDescription: "還沒有收藏任何提示詞",
-      startOptimize: "開始優化提示詞",
+      startOptimize: "優化",
       importDialog: {
         title: "匯入收藏",
         selectFile: "選擇 JSON 檔案",
@@ -408,7 +415,9 @@ export default {
   promptOptimizer: {
     title: "提示詞優化器",
     inputPlaceholder: "請輸入需要優化的prompt...",
-    optimize: "開始優化",
+    optimize: "優化",
+    analyze: "分析",
+    analyzing: "分析中...",
     history: "歷史紀錄",
     save: "儲存提示詞",
     share: "分享",
@@ -436,6 +445,8 @@ export default {
     contextHelp: "在進階模式下，您可以新增對話情境來幫助AI更好地理解優化需求",
     contextTitle: "優化情境",
     contextDescription: "為優化提供對話背景，幫助AI更好地理解優化目標",
+    enterPrompt: "輸入提示詞",
+    placeholder: "請輸入需要優化的提示詞...",
   },
   variables: {
     title: "變數管理",
@@ -587,7 +598,16 @@ export default {
       openEditor: "開啟編輯器",
     },
     title: "對話管理",
+    optimizeMessage: "優化選取的訊息",
+    selectForOptimization: "選擇此訊息進行優化",
+    selected: "已選取",
     messageCount: "共 {count} 則訊息",
+    stats: {
+      messages: "訊息",
+      variables: "變數",
+      missing: "變數缺失",
+      tools: "工具",
+    },
     quickTemplates: "快速範本",
     clearAll: "清空全部",
     noMessages: "暫無對話訊息",
@@ -695,6 +715,7 @@ export default {
     title: "模型管理",
     textModels: "文字模型",
     imageModels: "圖像模型",
+    functionModels: "功能模型",
     modelList: "模型清單",
     testConnection: "測試連線",
     editModel: "編輯",
@@ -818,6 +839,10 @@ export default {
     saveEditAriaLabel: "儲存模型修改",
     cancelAddAriaLabel: "取消新增模型",
     confirmAddAriaLabel: "確認新增模型",
+  },
+  functionModel: {
+    evaluationModel: "評估模型",
+    evaluationModelHint: "用於 LLM 智慧評估，預設使用全域優化模型",
   },
   templateManager: {
     title: "功能提示詞管理",
@@ -977,19 +1002,20 @@ export default {
       help: "",
     },
     model: "測試模型",
-    startTest: "開始測試",
-    startCompare: "開始對比",
+    startTest: "測試",
+    startCompare: "測試",
     testing: "測試中...",
     toggleCompare: {
       enable: "開啟對比",
       disable: "關閉對比",
     },
+    compareMode: "對比模式",
     originalResult: "原始提示詞結果",
     optimizedResult: "優化後提示詞結果",
     testResult: "測試結果",
     userPromptTest: "使用者提示詞測試",
     advanced: {
-      startTest: "開始測試",
+      startTest: "測試",
       result: "測試結果",
       messageCount: "{count} 則訊息",
       missingVariables: "缺少 {count} 個變數",
@@ -1099,9 +1125,13 @@ export default {
     },
   },
   prompt: {
-    optimized: "優化後的提示詞",
+    optimized: "優化工作區",
     optimizing: "優化中...",
     continueOptimize: "繼續優化",
+    analyze: "分析",
+    originalVersion: "原始",
+    originalVersionTooltip: "未經優化的原始輸入，編輯保存後將創建新版本",
+    applyToConversation: "套用到對話",
     copy: "複製",
     applyToTest: "套用到測試",
     appliedToTest: "已套用到進階測試，對話範本已自動配置",
@@ -1119,6 +1149,7 @@ export default {
     },
     error: {
       noTemplate: "請先選擇迭代提示詞",
+      noOptimizedPrompt: "請先優化提示詞",
     },
   },
   output: {
@@ -1161,6 +1192,7 @@ export default {
       noPreviousVersion: "沒有前一版本可供對比",
       testFailed: "測試失敗",
       testError: "測試過程中發生錯誤",
+      loadChainFailed: "載入優化歷史失敗",
       loadTemplatesFailed: "載入提示詞失敗",
       initFailed: "初始化失敗：{error}",
       loadModelsFailed: "載入模型清單失敗",
@@ -1169,6 +1201,7 @@ export default {
       loadHistoryFailed: "載入歷史紀錄失敗",
       clearHistoryFailed: "清空歷史紀錄失敗",
       historyChainDeleteFailed: "刪除歷史紀錄失敗",
+      historyRestoreFailed: "歷史紀錄恢復失敗：{error}",
       selectTemplateFailed: "選擇提示詞失敗：{error}",
       noOptimizeTemplate: "請先選擇優化提示詞",
       noOptimizeModel: "請先選擇優化模型",
@@ -1176,9 +1209,12 @@ export default {
       incompleteTestInfo: "請填寫完整的測試資訊",
       noDefaultTemplate: "無法載入預設提示詞",
       optimizeProcessFailed: "優化過程出錯",
+      promptServiceUnavailable: "優化服務暫時不可用",
       testProcessError: "測試過程中發生錯誤",
       initTemplateFailed: "初始化範本選擇失敗",
       appInitFailed: "應用程式初始化失敗，請重新整理或聯絡支援",
+      historyUnavailable: "歷史紀錄服務暫時不可用",
+      loadRecordFailed: "載入版本內容失敗",
     },
     success: {
       optimizeSuccess: "優化成功",
@@ -1191,15 +1227,37 @@ export default {
       historyLoaded: "歷史紀錄已載入",
       exitCompare: "已退出對比模式",
       compareEnabled: "對比模式已啟用",
+      optimizeAndApply: "已優化並套用 ({version})",
+      versionApplied: "已套用到對話",
+      chainAutoRestored: "已從歷史紀錄自動恢復優化鏈",
+      imageHistoryRestored: "圖像歷史紀錄已恢復",
+      conversationRestored: "已從歷史紀錄恢復完整對話",
+      imageFavoriteLoaded: "收藏的圖像提示詞已載入",
+      favoriteLoaded: "已將提示詞載入到輸入框",
+      localEditSaved: "已儲存為新版本",
     },
     warn: {
       loadOptimizeTemplateFailed: "載入已儲存的優化提示詞失敗",
       loadIterateTemplateFailed: "載入已儲存的迭代提示詞失敗",
     },
+    warning: {
+      cannotOptimizeRole: "無法優化 {role} 角色的訊息",
+      saveHistoryFailed: "儲存歷史紀錄失敗",
+      patchApplyFailed: "未能自動套用修復，請手動編輯",
+      messageNotFound: "找不到訊息",
+      noVersionSelected: "請先選擇要套用的版本",
+      noContentToApply: "沒有可套用的內容",
+      messageNotFoundInSnapshot: "歷史紀錄恢復成功，但找不到被優化的訊息",
+      restoredFromLegacyHistory: "從舊版本歷史紀錄恢復（僅恢復被優化的訊息）",
+      messageNotFoundInCurrentConversation: "目前對話中找不到被優化的訊息，無法恢復",
+    },
     info: {
       modelUpdated: "模型已更新",
       templateSelected: "選擇範本",
       optimizationModeAutoSwitched: "已自動切換到{mode}提示詞優化模式",
+      switchedToImageMode: "已自動切換到圖片模式",
+      switchedToFunctionMode: "已自動切換到{mode}模式",
+      multiTurnOptimizationPrompt: "多輪對話優化（{count}條訊息）",
     },
   },
   log: {
@@ -1361,6 +1419,38 @@ export default {
       label: "隨機種子",
       description: "用於控制生成結果的隨機數種子，相同種子產生相同結果",
     },
+    enable_thinking: {
+      label: "啟用思考",
+      description: "啟用思考模式，讓模型進行推理（僅支援部分模型）",
+    },
+    thinking_budget: {
+      label: "思考Token預算",
+      description: "分配給思考過程的最大Token數，用於限制推理長度",
+    },
+    enable_search: {
+      label: "啟用聯網搜尋",
+      description: "啟用聯網搜尋功能，讓模型獲取即時資訊（僅支援部分模型）",
+    },
+    max_completion_tokens: {
+      label: "最大補全Token數",
+      description:
+        "在補全中生成的最大Token數量（推薦使用，替代 max_tokens）。範圍：1-1,000,000。",
+    },
+    logprobs: {
+      label: "返回對數概率",
+      description:
+        "是否在回應中返回輸出Token的對數概率資訊。啟用後可以看到模型對每個Token的置信度。",
+    },
+    top_logprobs: {
+      label: "Top對數概率數量",
+      description:
+        "返回每個Token位置上概率最高的N個備選Token及其對數概率。範圍：0-20。需要先啟用 logprobs。",
+    },
+    n: {
+      label: "生成數量",
+      description:
+        "為每個輸入生成多少個補全結果。範圍：1-128。注意：生成多個結果會消耗更多Token配額。",
+    },
   },
   contextEditor: {
     // Variables tab (新增)
@@ -1425,7 +1515,6 @@ export default {
 
     // Tab labels
     messagesTab: "訊息編輯",
-    templatesTab: "快速範本",
     variablesTab: "變數管理",
     toolsTab: "工具管理",
 
@@ -1445,15 +1534,6 @@ export default {
     addTool: "新增工具",
     noDescription: "暫無描述",
     parametersCount: "{count} 個參數",
-
-    // Templates
-    templateCategory: "範本分類",
-    templateCount: "{count} 個範本",
-    noTemplates: "暫無範本",
-    noTemplatesHint: "在範本管理器中新增範本",
-    applyTemplate: "套用範本",
-    moreMessages: "還有 {count} 則訊息...",
-    templateApplied: "已套用範本：{name}",
 
     // Import/Export
     importTitle: "匯入情境資料",
@@ -1522,22 +1602,21 @@ export default {
     // Import/Export formats
     importFormats: {
       smart: { name: "智慧識別", description: "自動偵測格式並轉換" },
-      conversation: { name: "會話格式", description: "標準的會話訊息格式" },
       openai: { name: "OpenAI", description: "OpenAI API 請求格式" },
       langfuse: { name: "LangFuse", description: "LangFuse 追蹤資料格式" },
+      conversation: { name: "內部格式", description: "Prompt Optimizer 內部標準 JSON 結構" },
     },
     exportFormats: {
-      standard: { name: "標準格式", description: "內部標準資料格式" },
+      standard: { name: "內部格式", description: "Prompt Optimizer 內部標準資料格式" },
       openai: { name: "OpenAI", description: "OpenAI API 相容格式" },
-      template: { name: "範本格式", description: "可複用的範本格式" },
     },
 
-    // Import placeholders
+    // Import placeholders (文字本地化，JSON 範例固定英文)
     importPlaceholders: {
-      openai: 'OpenAI API 請求格式，例如：\n{\n  "messages": [...],\n  "model": "gpt-4"\n}',
-      langfuse: 'LangFuse 追蹤資料，例如：\n{\n  "input": {\n    "messages": [...]\n  }\n}',
-      conversation: '標準會話格式，例如：\n{\n  "messages": [\n    {"role": "system", "content": "..."},\n    {"role": "user", "content": "..."}\n  ]\n}',
-      smart: "貼上任意支援格式的 JSON 資料，系統將自動識別",
+      openai: "OpenAI API 請求格式（下方示例）：",
+      langfuse: "LangFuse 追蹤資料格式（下方示例）：",
+      conversation: "標準會話 JSON 格式（下方示例）：",
+      smart: "貼上任意支援的 JSON（OpenAI、LangFuse 或會話陣列），系統會自動辨識格式。",
     },
 
     // Console errors (開發者日誌)
@@ -1837,6 +1916,30 @@ export default {
         description:
           "設定圖像背景：auto（自動）、transparent（透明）、opaque（不透明）",
       },
+      negativePrompt: {
+        label: "負向提示詞",
+        description: "指定不希望在生成圖像中出現的內容",
+      },
+      promptExtend: {
+        label: "提示詞擴展",
+        description: "啟用後模型會自動擴展和最佳化提示詞以獲得更好的效果",
+      },
+      watermark: {
+        label: "浮水印",
+        description: "是否在生成的圖像上新增浮水印",
+      },
+      seed: {
+        label: "隨機種子",
+        description: "用於生成可複現結果的隨機種子，相同種子會生成相似圖像",
+      },
+      count: {
+        label: "生成數量",
+        description: "一次生成的圖像數量",
+      },
+      style: {
+        label: "圖像風格",
+        description: "生成圖像的藝術風格",
+      },
     },
   },
   // 變數提取功能
@@ -1874,5 +1977,97 @@ export default {
   variableGuide: {
     inlineHint:
       "支援變數功能：輸入 {doubleBraces} 觸發自動補全 · 選中文字可提取為變數 · 懸停查看變數值",
+  },
+  // LLM 智慧評估
+  evaluation: {
+    button: "評估",
+    evaluate: "評估",
+    reEvaluate: "重新評估",
+    compareEvaluate: "對比評估",
+    loading: "正在評估中...",
+    analyzing: "正在分析...",
+    overallScore: "總分",
+    dimensions: "維度評分",
+    issues: "問題",
+    improvements: "改進建議",
+    applyToIterate: "迭代優化",
+    applySuccess: "正在應用改進建議...",
+    noResult: "暫無評估結果，點擊評估按鈕開始評估",
+    viewDetails: "檢視詳情",
+    title: {
+      default: "評估結果",
+      original: "原始提示詞評估",
+      optimized: "優化後評估",
+      compare: "對比評估",
+      promptOnly: "提示詞品質分析",
+      promptIterate: "迭代優化分析",
+    },
+    type: {
+      original: "評估原始提示詞",
+      optimized: "評估優化效果",
+      compare: "對比評估",
+    },
+    level: {
+      excellent: "優秀",
+      good: "良好",
+      acceptable: "合格",
+      poor: "較差",
+      veryPoor: "很差",
+    },
+    dimension: {
+      goalAchievement: "目標達成度",
+      outputQuality: "輸出品質",
+      formatCompliance: "格式規範性",
+      relevance: "相關性",
+    },
+    optimizedBetter: "優化後效果更好",
+    originalBetter: "原始效果更好",
+    error: {
+      title: "評估失敗",
+      serviceNotReady: "評估服務未就緒，請稍後再試",
+      failed: "評估失敗：{error}",
+      noOptimizedPrompt: "沒有可優化的提示詞",
+    },
+    // 診斷相關翻譯
+    diagnose: {
+      title: "診斷分析",
+      confidence: "置信度",
+      findings: "發現問題",
+      patchPlan: "修復計畫",
+      noFindings: "未發現問題",
+      noPatchPlan: "無修復計畫",
+      applyFix: "應用修復",
+      replaceNow: "立即替換",
+      invariantsWarning: "受限於不可改變項約束",
+      changeBudgetWarning: "受限於變更預算限制",
+      status: {
+        ok: "診斷正常",
+        degraded: "部分降級",
+        failed: "診斷失敗",
+      },
+      severity: {
+        critical: "嚴重",
+        major: "重要",
+        minor: "次要",
+        suggestion: "建議",
+        unknown: "未知",
+      },
+      anchorType: {
+        text: "文本",
+        section: "段落",
+        pattern: "正則",
+      },
+      operation: {
+        insert: "插入",
+        replace: "替換",
+        delete: "刪除",
+      },
+      anchorPosition: {
+        before: "之前",
+        after: "之後",
+        replace: "替換",
+      },
+      invariantsRisks: "約束衝突風險",
+    },
   },
 };

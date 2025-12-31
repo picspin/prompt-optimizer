@@ -19,7 +19,44 @@
         >
             <!-- 输入控制区域 - 对齐InputPanel布局 -->
             <NCard :style="{ flexShrink: 0 }">
-                <NSpace vertical :size="16">
+                <!-- 折叠态：只显示标题栏 -->
+                <NFlex
+                    v-if="isInputPanelCollapsed"
+                    justify="space-between"
+                    align="center"
+                >
+                    <NFlex align="center" :size="8">
+                        <NText :depth="1" style="font-size: 18px; font-weight: 500">
+                            {{ t('imageWorkspace.input.originalPrompt') }}
+                        </NText>
+                        <NText
+                            v-if="originalPrompt"
+                            depth="3"
+                            style="font-size: 12px;"
+                        >
+                            {{ promptSummary }}
+                        </NText>
+                    </NFlex>
+                    <NButton
+                        type="tertiary"
+                        size="small"
+                        ghost
+                        round
+                        @click="isInputPanelCollapsed = false"
+                        :title="t('common.expand')"
+                    >
+                        <template #icon>
+                            <NIcon>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </NIcon>
+                        </template>
+                    </NButton>
+                </NFlex>
+
+                <!-- 展开态：完整输入面板 -->
+                <NSpace v-else vertical :size="16">
                     <!-- 标题区域 -->
                     <NFlex justify="space-between" align="center" :wrap="false">
                         <NText
@@ -53,6 +90,23 @@
                                                 stroke-linejoin="round"
                                                 d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
                                             />
+                                        </svg>
+                                    </NIcon>
+                                </template>
+                            </NButton>
+                            <!-- 折叠按钮 -->
+                            <NButton
+                                type="tertiary"
+                                size="small"
+                                ghost
+                                round
+                                @click="isInputPanelCollapsed = true"
+                                :title="t('common.collapse')"
+                            >
+                                <template #icon>
+                                    <NIcon>
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
                                         </svg>
                                     </NIcon>
                                 </template>
@@ -248,20 +302,41 @@
                             </NSpace>
                         </NGridItem>
 
-                        <!-- 优化按钮 -->
+                        <!-- 分析与优化按钮 -->
                         <NGridItem :span="4" :xs="24" :sm="4">
-                            <NSpace vertical :size="8" align="end">
+                            <NSpace :size="8" justify="end">
+                                <!-- 分析按钮（与优化同级） -->
+                                <NButton
+                                    type="default"
+                                    size="medium"
+                                    :loading="isAnalyzing"
+                                    @click="handleAnalyze"
+                                    :disabled="
+                                        isAnalyzing ||
+                                        isOptimizing ||
+                                        !originalPrompt.trim()
+                                    "
+                                    round
+                                >
+                                    {{
+                                        isAnalyzing
+                                            ? t('promptOptimizer.analyzing')
+                                            : t('promptOptimizer.analyze')
+                                    }}
+                                </NButton>
+                                <!-- 优化按钮 -->
                                 <NButton
                                     type="primary"
                                     size="medium"
                                     :loading="isOptimizing"
                                     @click="handleOptimizePrompt"
                                     :disabled="
+                                        isAnalyzing ||
+                                        isOptimizing ||
                                         !originalPrompt.trim() ||
                                         !selectedTextModelKey ||
                                         !selectedTemplate
                                     "
-                                    block
                                     round
                                 >
                                     {{
@@ -308,17 +383,17 @@
         </NFlex>
 
         <!-- 右侧：图像生成测试区域（图像模型） -->
-        <NCard
+        <NFlex
+            vertical
             :style="{
                 flex: 1,
                 overflow: 'auto',
                 height: '100%',
+                gap: '12px',
             }"
-            content-style="height: 100%; max-height: 100%; overflow: hidden;"
         >
-            <NFlex vertical :style="{ height: '100%' }">
-                <!-- 测试控制栏 -->
-                <div :style="{ flexShrink: 0 }">
+            <!-- 测试控制栏 -->
+            <NCard :style="{ flexShrink: 0 }" size="small">
                     <n-form label-placement="left" size="medium">
                         <n-form-item
                             :label="t('imageWorkspace.generation.imageModel')"
@@ -377,80 +452,15 @@
                                         @update:modelValue="saveSelections"
                                     />
                                 </template>
-                                <!-- 当前选中模型的Provider、Model和能力标签 -->
-                                <n-space
-                                    v-if="
-                                        selectedImageModelInfo ||
-                                        selectedImageModelCapabilities
-                                    "
-                                    :size="6"
-                                    :wrap="true"
+                                <!-- 当前选中模型名称标签 -->
+                                <n-tag
+                                    v-if="selectedImageModelInfo?.model"
+                                    size="small"
+                                    type="primary"
+                                    :bordered="false"
                                 >
-                                    <!-- Provider和Model标签 -->
-                                    <template v-if="selectedImageModelInfo">
-                                        <n-tag
-                                            size="small"
-                                            type="info"
-                                            :bordered="false"
-                                        >
-                                            {{
-                                                selectedImageModelInfo.provider
-                                            }}
-                                        </n-tag>
-                                        <n-tag
-                                            size="small"
-                                            type="primary"
-                                            :bordered="false"
-                                        >
-                                            {{ selectedImageModelInfo.model }}
-                                        </n-tag>
-                                    </template>
-                                    <!-- 能力标签 -->
-                                    <template
-                                        v-if="selectedImageModelCapabilities"
-                                    >
-                                        <n-tag
-                                            v-if="
-                                                selectedImageModelCapabilities.text2image
-                                            "
-                                            size="small"
-                                            type="success"
-                                            :bordered="false"
-                                        >
-                                            {{
-                                                t("image.capability.text2image")
-                                            }}
-                                        </n-tag>
-                                        <n-tag
-                                            v-if="
-                                                selectedImageModelCapabilities.image2image
-                                            "
-                                            size="small"
-                                            type="info"
-                                            :bordered="false"
-                                        >
-                                            {{
-                                                t(
-                                                    "image.capability.image2image",
-                                                )
-                                            }}
-                                        </n-tag>
-                                        <n-tag
-                                            v-if="
-                                                selectedImageModelCapabilities.highResolution
-                                            "
-                                            size="small"
-                                            type="primary"
-                                            :bordered="false"
-                                        >
-                                            {{
-                                                t(
-                                                    "image.capability.highResolution",
-                                                )
-                                            }}
-                                        </n-tag>
-                                    </template>
-                                </n-space>
+                                    {{ selectedImageModelInfo.model }}
+                                </n-tag>
                             </n-space>
                         </n-form-item>
                         <n-form-item>
@@ -485,9 +495,9 @@
                             </n-space>
                         </n-form-item>
                     </n-form>
-                </div>
+            </NCard>
 
-                <!-- 图像结果展示区域（使用统一的 TestResultSection 布局） -->
+            <!-- 图像结果展示区域（使用统一的 TestResultSection 布局） -->
                 <TestResultSection
                     :is-compare-mode="isCompareMode"
                     :style="{ flex: 1, minHeight: 0 }"
@@ -1015,8 +1025,7 @@
                         </template>
                     </template>
                 </TestResultSection>
-            </NFlex>
-        </NCard>
+        </NFlex>
     </NFlex>
 
     <!-- 原始提示词 - 全屏编辑器 -->
@@ -1125,6 +1134,7 @@ import PromptPanelUI from "../PromptPanel.vue";
 import TestResultSection from "../TestResultSection.vue";
 import SelectWithConfig from "../SelectWithConfig.vue";
 import { useImageWorkspace, type ImageUploadChangePayload } from '../../composables/image/useImageWorkspace';
+import { provideEvaluation, useEvaluationContextOptional } from '../../composables/prompt/useEvaluationContext';
 import { DataTransformer, OptionAccessors } from "../../utils/data-transformer";
 import type { AppServices } from "../../types/services";
 import { useFullscreen } from "../../composables/ui/useFullscreen";
@@ -1140,6 +1150,9 @@ const toast = useToast();
 
 // 服务注入
 const services = inject<Ref<AppServices | null>>("services", ref(null));
+
+// 🆕 获取全局评估实例（如果存在，由 App 层 provideEvaluation 注入）
+const globalEvaluation = useEvaluationContextOptional();
 
 // 使用图像工作区 composable
 const {
@@ -1170,7 +1183,6 @@ const {
     imageModelOptions,
     optimizationMode,
     advancedModeEnabled,
-    selectedImageModelCapabilities,
     selectedImageModelInfo,
 
     // 图像生成状态
@@ -1191,10 +1203,65 @@ const {
     refreshTextModels,
     refreshImageModels,
     restoreTemplateSelection,
-} = useImageWorkspace(services);
+
+    // 🆕 评估处理器
+    evaluationHandler,
+
+    // 🆕 分析功能
+    handleAnalyze: analyzePrompt,
+} = useImageWorkspace(services, globalEvaluation || undefined);
+
+// 🆕 提供评估上下文给 PromptPanel（优先复用全局 evaluation，避免与 App 的 EvaluationPanel 分裂）
+provideEvaluation(evaluationHandler.evaluation);
 
 // PromptPanel 引用，用于在语言切换后刷新迭代模板选择
 const promptPanelRef = ref<InstanceType<typeof PromptPanelUI> | null>(null);
+
+// 输入区折叠状态（初始展开）
+const isInputPanelCollapsed = ref(false);
+
+// 提示词摘要（折叠态显示）
+const promptSummary = computed(() => {
+    if (!originalPrompt.value) return '';
+    return originalPrompt.value.length > 50
+        ? originalPrompt.value.slice(0, 50) + '...'
+        : originalPrompt.value;
+});
+
+/** 是否正在执行分析 */
+const isAnalyzing = ref(false);
+
+/**
+ * 处理分析操作
+ * - 清空版本链，创建 V0（与优化同级）
+ * - 不写入历史（分析不产生新提示词）
+ * - 触发 prompt-only 评估
+ */
+const handleAnalyze = async () => {
+    if (!originalPrompt.value?.trim()) return;
+    if (isOptimizing.value) return;
+
+    isAnalyzing.value = true;
+
+    // 1. 清空版本链，创建虚拟 V0
+    analyzePrompt();
+
+    // 2. 清理旧的提示词评估结果，避免跨提示词残留
+    evaluationHandler.evaluation.clearResult('prompt-only');
+    evaluationHandler.evaluation.clearResult('prompt-iterate');
+
+    // 3. 收起输入区域
+    isInputPanelCollapsed.value = true;
+
+    await nextTick();
+
+    // 4. 触发 prompt-only 评估
+    try {
+        await evaluationHandler.handleEvaluate('prompt-only');
+    } finally {
+        isAnalyzing.value = false;
+    }
+};
 
 // 注入 App 层统一的 openTemplateManager / openModelManager / handleSaveFavorite 接口
 type TemplateEntryType =
@@ -1208,10 +1275,9 @@ type TemplateEntryType =
 const appOpenTemplateManager = inject<
     ((type?: TemplateEntryType) => void) | null
 >("openTemplateManager", null);
-const appOpenModelManager = inject<((tab?: "text" | "image") => void) | null>(
-    "openModelManager",
-    null,
-);
+const appOpenModelManager = inject<
+    ((tab?: "text" | "image" | "function") => void) | null
+>("openModelManager", null);
 const appHandleSaveFavorite = inject<
     ((data: { content: string; originalContent?: string }) => void) | null
 >("handleSaveFavorite", null);

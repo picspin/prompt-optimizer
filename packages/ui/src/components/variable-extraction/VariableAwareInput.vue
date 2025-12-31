@@ -50,8 +50,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 
-import { EditorView, basicSetup } from "codemirror";
+import { EditorView, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
+import { history, historyKeymap, defaultKeymap, indentWithTab } from "@codemirror/commands";
+import { foldGutter, foldKeymap, indentOnInput, bracketMatching, defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { closeBrackets, completionKeymap } from "@codemirror/autocomplete";
+import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { lintKeymap } from "@codemirror/lint";
+
 import { NPopover, NButton, useThemeVars } from "naive-ui";
 import { useI18n } from "vue-i18n";
 import { useToast } from "../../composables/ui/useToast";
@@ -350,7 +356,11 @@ const handleAddMissingVariable = (varName: string) => {
 const editorHeight = computed(() => {
     const autosize = props.autosize;
     if (typeof autosize === "boolean") {
-        return autosize ? "auto" : "200px";
+        // autosize === true 时，完全自适应容器高度（100%）
+        // autosize === false 时，使用固定高度
+        return autosize
+            ? { min: '100%', max: 'none' }
+            : { min: '200px', max: '200px' };
     }
     const minRows = autosize.minRows || 4;
     const maxRows = autosize.maxRows || 12;
@@ -513,18 +523,38 @@ onMounted(() => {
     const startState = EditorState.create({
         doc: props.modelValue,
         extensions: [
-            basicSetup,
-            // 变量高亮 (使用 Compartment)
-            highlighterCompartment.of(variableHighlighter(extractVariables)),
-            // 变量自动完成 (使用 Compartment)
+            highlightSpecialChars(),
+            history(),
+            foldGutter(),
+            drawSelection(),
+            dropCursor(),
+            EditorState.allowMultipleSelections.of(true),
+            indentOnInput(),
+            syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+            bracketMatching(),
+            closeBrackets(),
             autocompletionCompartment.of(
                 variableAutocompletion(
                     globalVariablesMap.value,
                     temporaryVariablesMap.value,
                     predefinedVariablesMap.value,
                     variableDetectionLabels.value,
-                ),
+                )
             ),
+            rectangularSelection(),
+            crosshairCursor(),
+            highlightSelectionMatches(),
+            keymap.of([
+                ...defaultKeymap,
+                ...searchKeymap,
+                ...historyKeymap,
+                ...foldKeymap,
+                ...completionKeymap,
+                ...lintKeymap,
+                indentWithTab
+            ]),
+            // 变量高亮 (使用 Compartment)
+            highlighterCompartment.of(variableHighlighter(extractVariables)),
             // 缺失变量提示
             missingVariableTooltipCompartment.of(
                 missingVariableTooltip(
@@ -575,11 +605,9 @@ onMounted(() => {
                     checkSelection();
                 }
             }),
-            // 占位符
+            // 占位符（使用官方 placeholder 扩展）
             placeholderCompartment.of(
-                EditorView.contentAttributes.of({
-                    "aria-placeholder": props.placeholder,
-                }),
+                props.placeholder ? cmPlaceholder(props.placeholder) : []
             ),
         ],
     });
@@ -674,9 +702,7 @@ watch(
         editorView.dispatch({
             effects: [
                 placeholderCompartment.reconfigure(
-                    EditorView.contentAttributes.of({
-                        "aria-placeholder": placeholder,
-                    }),
+                    placeholder ? cmPlaceholder(placeholder) : []
                 ),
             ],
         });
@@ -798,6 +824,9 @@ defineExpose({
 .variable-aware-input-wrapper {
     position: relative;
     width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 .codemirror-container {
@@ -805,6 +834,8 @@ defineExpose({
     border-radius: var(--n-border-radius);
     overflow: hidden;
     transition: border-color 0.3s var(--n-bezier);
+    flex: 1;
+    min-height: 0;
 }
 
 .codemirror-container:hover {
@@ -841,12 +872,11 @@ defineExpose({
     word-break: break-word;
 }
 
-/* 占位符样式 */
-.codemirror-container :deep(.cm-content[aria-placeholder]:empty::before) {
-    content: attr(aria-placeholder);
+/* 占位符样式（使用 CodeMirror 官方 placeholder 扩展） */
+.codemirror-container :deep(.cm-placeholder) {
     color: var(--n-placeholder-color);
     pointer-events: none;
-    position: absolute;
+    font-style: italic;
 }
 
 /* 自动完成面板样式 */

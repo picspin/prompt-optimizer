@@ -6,26 +6,47 @@
     size="small"
     class="optimization-mode-selector"
   >
-    <NRadioButton
-      v-if="!hideSystemOption"
-      value="system"
-      :title="t('promptOptimizer.systemPromptHelp')"
-    >
-      {{ t('promptOptimizer.systemPrompt') }}
-    </NRadioButton>
-    <NRadioButton
-      value="user"
-      :title="t('promptOptimizer.userPromptHelp')"
-    >
-      {{ t('promptOptimizer.userPrompt') }}
-    </NRadioButton>
+    <!-- 基础模式：系统 | 用户 -->
+    <template v-if="functionMode !== 'pro'">
+      <NRadioButton
+        v-if="!hideSystemOption"
+        value="system"
+        :title="systemHelp"
+      >
+        {{ systemLabel }}
+      </NRadioButton>
+      <NRadioButton
+        value="user"
+        :title="userHelp"
+      >
+        {{ userLabel }}
+      </NRadioButton>
+    </template>
+    <!-- 上下文模式：变量 | 多对话 -->
+    <template v-else>
+      <NRadioButton
+        value="user"
+        :title="userHelp"
+      >
+        {{ userLabel }}
+      </NRadioButton>
+      <NRadioButton
+        v-if="!hideSystemOption"
+        value="system"
+        :title="systemHelp"
+      >
+        {{ systemLabel }}
+      </NRadioButton>
+    </template>
   </NRadioGroup>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { NRadioGroup, NRadioButton } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import type { OptimizationMode } from '@prompt-optimizer/core'
+import type { FunctionMode } from '../composables/mode'
 
 const { t } = useI18n()
 
@@ -33,6 +54,8 @@ interface Props {
   modelValue: OptimizationMode
   /** 是否隐藏系统提示词选项（用于临时禁用功能） */
   hideSystemOption?: boolean
+  /** 当前功能模式，用于决定显示文案 */
+  functionMode?: FunctionMode
 }
 
 interface Emits {
@@ -42,8 +65,34 @@ interface Emits {
 
 const props = withDefaults(defineProps<Props>(), {
   hideSystemOption: false,
+  functionMode: 'basic',
 })
 const emit = defineEmits<Emits>()
+
+// 根据功能模式动态获取按钮文本
+const systemLabel = computed(() => {
+  return props.functionMode === 'pro'
+    ? t('contextMode.optimizationMode.message')
+    : t('promptOptimizer.systemPrompt')
+})
+
+const userLabel = computed(() => {
+  return props.functionMode === 'pro'
+    ? t('contextMode.optimizationMode.variable')
+    : t('promptOptimizer.userPrompt')
+})
+
+const systemHelp = computed(() => {
+  return props.functionMode === 'pro'
+    ? t('contextMode.system.tooltip')
+    : t('promptOptimizer.systemPromptHelp')
+})
+
+const userHelp = computed(() => {
+  return props.functionMode === 'pro'
+    ? t('contextMode.user.tooltip')
+    : t('promptOptimizer.userPromptHelp')
+})
 
 /**
  * 更新优化模式

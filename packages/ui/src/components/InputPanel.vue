@@ -106,6 +106,8 @@
                         </NIcon>
                     </template>
                 </NButton>
+                <!-- 标题栏额外按钮插槽 -->
+                <slot name="header-extra"></slot>
             </NFlex>
         </NFlex>
 
@@ -176,16 +178,27 @@
                 </NSpace>
             </NGridItem>
 
-            <!-- 提交按钮 -->
+            <!-- 提交按钮区域 -->
             <NGridItem :span="5" :xs="24" :sm="5">
-                <NSpace vertical :size="8" align="end">
+                <NSpace :size="8" justify="end" style="width: 100%">
+                    <!-- 分析按钮（与优化同级） -->
+                    <NButton
+                        v-if="showAnalyzeButton"
+                        type="default"
+                        size="medium"
+                        @click="$emit('analyze')"
+                        :loading="analyzeLoading"
+                        :disabled="analyzeLoading || loading || disabled || !modelValue.trim()"
+                    >
+                        {{ analyzeLoading ? $t('promptOptimizer.analyzing') : $t('promptOptimizer.analyze') }}
+                    </NButton>
+                    <!-- 优化按钮 -->
                     <NButton
                         type="primary"
                         size="medium"
                         @click="$emit('submit')"
                         :loading="loading"
-                        :disabled="loading || disabled || !modelValue.trim()"
-                        block
+                        :disabled="analyzeLoading || loading || disabled || !modelValue.trim()"
                     >
                         {{ loading ? loadingText : buttonText }}
                     </NButton>
@@ -261,6 +274,11 @@ interface Props {
     /** 🆕 帮助提示文本（显示在标题旁边的问号图标，悬浮时显示） */
     helpText?: string;
 
+    /** 是否显示分析按钮 */
+    showAnalyzeButton?: boolean;
+    /** 分析按钮是否正在加载 */
+    analyzeLoading?: boolean;
+
     /** 🆕 是否启用变量提取功能 */
     enableVariableExtraction?: boolean;
     /** 🆕 已存在的全局变量名列表 */
@@ -284,6 +302,8 @@ const props = withDefaults(defineProps<Props>(), {
     disabled: false,
     showPreview: false,
     helpText: "",
+    showAnalyzeButton: false,
+    analyzeLoading: false,
     enableVariableExtraction: false,
     existingGlobalVariables: () => [],
     existingTemporaryVariables: () => [],
@@ -297,6 +317,7 @@ const emit = defineEmits<{
     "update:modelValue": [value: string];
     "update:selectedModel": [value: string];
     submit: [];
+    analyze: [];
     configModel: [];
     "open-preview": [];
     /** 🆕 变量提取事件 */

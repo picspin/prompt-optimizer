@@ -58,6 +58,8 @@ export default {
     iterate: "Iterate",
     system: "System",
     user: "User",
+    basic: "Basic",
+    context: "Context",
     copySuccess: "Copied to clipboard",
     copyFailed: "Copy Failed",
     appName: "Prompt Optimizer",
@@ -120,14 +122,19 @@ export default {
     imageMode: "Image",
   },
   contextMode: {
+    optimizationMode: {
+      message: "Multi-Message",
+      variable: "Variable",
+    },
     user: {
-      label: "User Mode",
+      label: "Variable Mode",
       tooltip: "Optimize single user prompt, focus on variables and tools",
     },
     system: {
-      label: "System Mode",
+      label: "Multi-Message Mode",
       tooltip:
         "Optimize multiple system messages with full conversation management",
+      selectMessageHint: "Select a system/user message to view its V0/V1 results",
     },
     actions: {
       globalVariables: "Global Variables",
@@ -168,7 +175,7 @@ export default {
       add: "Add",
       emptySearchResult: "No matching favorites found",
       emptyDescription: "No favorites yet",
-      startOptimize: "Start optimizing prompts",
+      startOptimize: "Optimize",
       importDialog: {
         title: "Import Favorites",
         selectFile: "Select JSON file",
@@ -422,6 +429,8 @@ export default {
     title: "Prompt Optimizer",
     inputPlaceholder: "Enter your prompt to optimize...",
     optimize: "Optimize",
+    analyze: "Analyze",
+    analyzing: "Analyzing...",
     history: "History",
     save: "Save Prompt",
     share: "Share",
@@ -451,6 +460,8 @@ export default {
     contextTitle: "Optimization Context",
     contextDescription:
       "Provide conversation background for optimization to help AI better understand optimization goals",
+    enterPrompt: "Enter Prompt",
+    placeholder: "Enter the prompt you want to optimize...",
   },
   variables: {
     title: "Variable Manager",
@@ -605,7 +616,16 @@ export default {
       openEditor: "Open Editor",
     },
     title: "Conversation Manager",
+    optimizeMessage: "Optimize Selected Message",
+    selectForOptimization: "Select this message for optimization",
+    selected: "Selected",
     messageCount: "{count} messages",
+    stats: {
+      messages: "Messages",
+      variables: "Variables",
+      missing: "Vars Missing",
+      tools: "Tools",
+    },
     quickTemplates: "Quick Templates",
     clearAll: "Clear All",
     noMessages: "No conversation messages yet",
@@ -715,6 +735,7 @@ export default {
     title: "Model Manager",
     textModels: "Text Models",
     imageModels: "Image Models",
+    functionModels: "Function Models",
     modelList: "Model List",
     testConnection: "Test Connection",
     editModel: "Edit",
@@ -849,6 +870,10 @@ export default {
     saveEditAriaLabel: "Save model changes",
     cancelAddAriaLabel: "Cancel adding model",
     confirmAddAriaLabel: "Confirm add model",
+  },
+  functionModel: {
+    evaluationModel: "Evaluation Model",
+    evaluationModelHint: "Used for LLM evaluation, defaults to global optimization model",
   },
   templateManager: {
     title: "Template Manager",
@@ -1014,19 +1039,20 @@ export default {
       help: "",
     },
     model: "Test Model",
-    startTest: "Start Test",
-    startCompare: "Start Compare Test",
+    startTest: "Test",
+    startCompare: "Test",
     testing: "Testing...",
     toggleCompare: {
       enable: "Enable Compare",
       disable: "Disable Compare",
     },
+    compareMode: "Compare Mode",
     originalResult: "Original Prompt Result",
     optimizedResult: "Optimized Prompt Result",
     testResult: "Test Result",
     userPromptTest: "User Prompt Test",
     advanced: {
-      startTest: "Start Test",
+      startTest: "Test",
       result: "Test Result",
       messageCount: "{count} messages",
       missingVariables: "{count} missing variables",
@@ -1136,9 +1162,13 @@ export default {
     },
   },
   prompt: {
-    optimized: "Optimized Prompt",
+    optimized: "Optimization Workspace",
     optimizing: "Optimizing...",
     continueOptimize: "Continue Optimize",
+    analyze: "Analyze",
+    originalVersion: "Original",
+    originalVersionTooltip: "Original input without optimization. Editing and saving will create a new version.",
+    applyToConversation: "Apply to Conversation",
     copy: "Copy",
     applyToTest: "Apply to Test",
     appliedToTest:
@@ -1148,6 +1178,10 @@ export default {
     iteratePlaceholder:
       "e.g., Make the prompt more concise, add specific functionality description, etc...",
     confirmOptimize: "Confirm Optimize",
+    saveChanges: "Save Changes",
+    saveChangesNote: "Saved local edits",
+    unsavedChangesConfirm:
+      "You have unsaved changes. Switching versions will discard them. Continue?",
     iterateTitle: "Iteration Template",
     selectIterateTemplate: "Please select iteration template:",
     diff: {
@@ -1158,6 +1192,7 @@ export default {
     },
     error: {
       noTemplate: "Please select an iteration template first",
+      noOptimizedPrompt: "Please optimize the prompt first",
     },
   },
   output: {
@@ -1199,6 +1234,9 @@ export default {
       compareFailed: "Comparison analysis failed",
       noVersionsToCompare: "Not enough versions to compare",
       noPreviousVersion: "No previous version available for comparison",
+      loadChainFailed: "Failed to load optimization history",
+      historyUnavailable: "History service is currently unavailable",
+      invalidVersion: "Invalid version",
       testFailed: "Test failed",
       testError: "Error occurred during test",
       loadTemplatesFailed: "Failed to load templates",
@@ -1209,6 +1247,7 @@ export default {
       loadHistoryFailed: "Failed to load history",
       clearHistoryFailed: "Failed to clear history",
       historyChainDeleteFailed: "Failed to delete history record",
+      historyRestoreFailed: "History restore failed: {error}",
       selectTemplateFailed: "Failed to select template: {error}",
       noOptimizeTemplate: "Please select an optimization template first",
       noOptimizeModel: "Please select an optimization model first",
@@ -1216,10 +1255,12 @@ export default {
       incompleteTestInfo: "Please fill in complete test information",
       noDefaultTemplate: "Failed to load default template",
       optimizeProcessFailed: "Error in optimization process",
+      promptServiceUnavailable: "Optimization service is currently unavailable",
       testProcessError: "Error occurred during test process",
       initTemplateFailed: "Failed to initialize template selection",
       appInitFailed:
         "Application initialization failed, please refresh or contact support",
+      loadRecordFailed: "Failed to load version content",
     },
     success: {
       optimizeSuccess: "Optimization successful",
@@ -1232,16 +1273,38 @@ export default {
       historyLoaded: "History loaded successfully",
       exitCompare: "Exited compare mode",
       compareEnabled: "Compare mode enabled",
+      optimizeAndApply: "Optimized and applied ({version})",
+      versionApplied: "Applied to conversation",
+      chainAutoRestored: "Optimization chain automatically restored from history",
+      imageHistoryRestored: "Image history restored",
+      conversationRestored: "Complete conversation restored from history",
+      imageFavoriteLoaded: "Favorite image prompt loaded",
+      favoriteLoaded: "Prompt loaded to input",
+      localEditSaved: "Saved as a new version",
     },
     warn: {
       loadOptimizeTemplateFailed: "Failed to load saved optimization template",
       loadIterateTemplateFailed: "Failed to load saved iteration template",
+    },
+    warning: {
+      cannotOptimizeRole: "Cannot optimize {role} role messages",
+      saveHistoryFailed: "Failed to save history",
+      patchApplyFailed: "Couldn't apply the fix automatically. Please edit manually.",
+      messageNotFound: "Message not found",
+      noVersionSelected: "Please select a version to apply",
+      noContentToApply: "No content to apply",
+      messageNotFoundInSnapshot: "History restored successfully, but optimized message not found",
+      restoredFromLegacyHistory: "Restored from legacy history (only optimized message restored)",
+      messageNotFoundInCurrentConversation: "Optimized message not found in current conversation, cannot restore",
     },
     info: {
       modelUpdated: "Model updated",
       templateSelected: "Template selected",
       optimizationModeAutoSwitched:
         "Automatically switched to {mode} prompt optimization mode",
+      switchedToImageMode: "Automatically switched to image mode",
+      switchedToFunctionMode: "Automatically switched to {mode} mode",
+      multiTurnOptimizationPrompt: "Multi-turn conversation optimization ({count} messages)",
     },
   },
   log: {
@@ -1427,6 +1490,18 @@ export default {
       description:
         "Random seed for controlling generation results, same seed produces same output",
     },
+    enable_thinking: {
+      label: "Enable Thinking",
+      description: "Enable thinking mode for complex reasoning tasks (supported models only)",
+    },
+    thinking_budget: {
+      label: "Thinking Budget",
+      description: "Maximum tokens for thinking process, limits reasoning length",
+    },
+    enable_search: {
+      label: "Enable Search",
+      description: "Enable internet search for real-time information (supported models only)",
+    },
     max_completion_tokens: {
       label: "Max Completion Tokens",
       description:
@@ -1504,15 +1579,6 @@ export default {
     noDescription: "No description",
     parametersCount: "{count} parameters",
 
-    // Templates
-    templateCategory: "Template Category",
-    templateCount: "{count} templates",
-    noTemplates: "No templates",
-    noTemplatesHint: "Add templates in Template Manager",
-    applyTemplate: "Apply Template",
-    moreMessages: "{count} more messages...",
-    templateApplied: "Template applied: {name}",
-
     // Import/Export
     importTitle: "Import Context Data",
     importFormat: "Import Format:",
@@ -1556,7 +1622,6 @@ export default {
 
     // Tab labels
     messagesTab: "Messages",
-    templatesTab: "Templates",
     variablesTab: "Variables",
     toolsTab: "Tools",
 
@@ -1616,22 +1681,21 @@ export default {
     // Import/Export formats
     importFormats: {
       smart: { name: "Smart Detection", description: "Auto-detect format and convert" },
-      conversation: { name: "Conversation", description: "Standard conversation message format" },
       openai: { name: "OpenAI", description: "OpenAI API request format" },
       langfuse: { name: "LangFuse", description: "LangFuse tracking data format" },
+      conversation: { name: "Internal Format", description: "Prompt Optimizer internal JSON structure" },
     },
     exportFormats: {
-      standard: { name: "Standard", description: "Internal standard data format" },
+      standard: { name: "Internal Format", description: "Prompt Optimizer internal standard format" },
       openai: { name: "OpenAI", description: "OpenAI API compatible format" },
-      template: { name: "Template", description: "Reusable template format" },
     },
 
-    // Import placeholders
+    // Import placeholders (localized text, JSON snippet fixed in component)
     importPlaceholders: {
-      openai: 'OpenAI API request format, e.g.:\n{\n  "messages": [...],\n  "model": "gpt-4"\n}',
-      langfuse: 'LangFuse tracking data, e.g.:\n{\n  "input": {\n    "messages": [...]\n  }\n}',
-      conversation: 'Standard conversation format, e.g.:\n{\n  "messages": [\n    {"role": "system", "content": "..."},\n    {"role": "user", "content": "..."}\n  ]\n}',
-      smart: "Paste any supported JSON format, system will auto-detect",
+      openai: "OpenAI API request format (example below):",
+      langfuse: "LangFuse trace payload (example below):",
+      conversation: "Standard conversation JSON (example below):",
+      smart: "Paste any supported JSON format (OpenAI, LangFuse, or conversation array). The editor will auto-detect the format.",
     },
 
     // Console errors (developer logs)
@@ -1940,6 +2004,30 @@ export default {
         description:
           "Set image background: auto (automatic), transparent (transparent), opaque (opaque)",
       },
+      negativePrompt: {
+        label: "Negative Prompt",
+        description: "Specify content you don't want to appear in the generated image",
+      },
+      promptExtend: {
+        label: "Prompt Extension",
+        description: "When enabled, the model will automatically expand and optimize the prompt for better results",
+      },
+      watermark: {
+        label: "Watermark",
+        description: "Whether to add a watermark on the generated image",
+      },
+      seed: {
+        label: "Random Seed",
+        description: "Random seed for reproducible results, same seed generates similar images",
+      },
+      count: {
+        label: "Generation Count",
+        description: "Number of images to generate at once",
+      },
+      style: {
+        label: "Image Style",
+        description: "Artistic style for the generated image",
+      },
     },
   },
   // Variable Extraction Feature
@@ -1981,5 +2069,97 @@ export default {
   variableGuide: {
     inlineHint:
       "Variable support: Type {doubleBraces} for auto-completion · Select text to extract · Hover to view values",
+  },
+  // LLM Intelligent Evaluation
+  evaluation: {
+    button: "Evaluate",
+    evaluate: "Evaluate",
+    reEvaluate: "Re-evaluate",
+    compareEvaluate: "Compare",
+    loading: "Evaluating...",
+    analyzing: "Analyzing...",
+    overallScore: "Overall",
+    dimensions: "Dimension Scores",
+    issues: "Issues",
+    improvements: "Improvements",
+    applyToIterate: "Iterate",
+    applySuccess: "Applying improvement...",
+    noResult: "No evaluation result yet. Click the evaluate button to start.",
+    viewDetails: "View Details",
+    title: {
+      default: "Evaluation Result",
+      original: "Original Prompt Evaluation",
+      optimized: "Optimized Prompt Evaluation",
+      compare: "Comparison Evaluation",
+      promptOnly: "Prompt Quality Analysis",
+      promptIterate: "Iteration Analysis",
+    },
+    type: {
+      original: "Evaluate Original Prompt",
+      optimized: "Evaluate Optimization",
+      compare: "Compare Evaluation",
+    },
+    level: {
+      excellent: "Excellent",
+      good: "Good",
+      acceptable: "Acceptable",
+      poor: "Poor",
+      veryPoor: "Very Poor",
+    },
+    dimension: {
+      goalAchievement: "Goal Achievement",
+      outputQuality: "Output Quality",
+      formatCompliance: "Format Compliance",
+      relevance: "Relevance",
+    },
+    optimizedBetter: "Optimized version is better",
+    originalBetter: "Original version is better",
+    error: {
+      title: "Evaluation Failed",
+      serviceNotReady: "Evaluation service not ready, please try again later",
+      failed: "Evaluation failed: {error}",
+      noOptimizedPrompt: "No prompt to optimize",
+    },
+    // Diagnosis related translations
+    diagnose: {
+      title: "Diagnosis Analysis",
+      confidence: "Confidence",
+      findings: "Findings",
+      patchPlan: "Patch Plan",
+      noFindings: "No issues found",
+      noPatchPlan: "No patch plan",
+      applyFix: "Apply Fix",
+      replaceNow: "Replace Now",
+      invariantsWarning: "Constrained by invariants",
+      changeBudgetWarning: "Constrained by change budget",
+      status: {
+        ok: "Diagnosis OK",
+        degraded: "Partially Degraded",
+        failed: "Diagnosis Failed",
+      },
+      severity: {
+        critical: "Critical",
+        major: "Major",
+        minor: "Minor",
+        suggestion: "Suggestion",
+        unknown: "Unknown",
+      },
+      anchorType: {
+        text: "Text",
+        section: "Section",
+        pattern: "Pattern",
+      },
+      operation: {
+        insert: "Insert",
+        replace: "Replace",
+        delete: "Delete",
+      },
+      anchorPosition: {
+        before: "Before",
+        after: "After",
+        replace: "Replace",
+      },
+      invariantsRisks: "Invariant Risks",
+    },
   },
 };

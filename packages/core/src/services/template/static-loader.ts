@@ -8,7 +8,7 @@ import { ALL_TEMPLATES } from './default-templates';
  * 🔄 直接使用：无需复杂的元数据推导和映射
  */
 
-// 类型定义（支持 8 类：基础 + 上下文 + 图像）
+// 类型定义（支持 9 类：基础 + 上下文 + 图像 + 评估）
 export type TemplateType =
   | 'optimize'
   | 'user-optimize'
@@ -16,9 +16,10 @@ export type TemplateType =
   | 'image2imageOptimize'
   | 'imageIterate'
   | 'iterate'
-  | 'context-system-optimize'
+  | 'conversation-message-optimize'
   | 'context-user-optimize'
-  | 'context-iterate';
+  | 'context-iterate'
+  | 'evaluation';
 export type Language = 'zh' | 'en';
 
 export interface StaticTemplateCollection {
@@ -74,9 +75,10 @@ export class StaticLoader {
         'image2imageOptimize': { zh: {}, en: {} },
         'imageIterate': { zh: {}, en: {} },
         'iterate': { zh: {}, en: {} },
-        'context-system-optimize': { zh: {}, en: {} },
+        'conversation-message-optimize': { zh: {}, en: {} },
         'context-user-optimize': { zh: {}, en: {} },
-        'context-iterate': { zh: {}, en: {} }
+        'context-iterate': { zh: {}, en: {} },
+        'evaluation': { zh: {}, en: {} }
       };
 
       // 处理每个模板
@@ -105,14 +107,17 @@ export class StaticLoader {
           case 'imageIterate':
             normalizedType = 'imageIterate';
             break;
-          case 'contextSystemOptimize':
-            normalizedType = 'context-system-optimize';
+          case 'conversationMessageOptimize':
+            normalizedType = 'conversation-message-optimize';
             break;
           case 'contextUserOptimize':
             normalizedType = 'context-user-optimize';
             break;
           case 'contextIterate':
             normalizedType = 'context-iterate';
+            break;
+          case 'evaluation':
+            normalizedType = 'evaluation';
             break;
           case 'iterate':
           case 'optimize':
@@ -143,9 +148,10 @@ export class StaticLoader {
         image2imageOptimize: Object.keys(byType.image2imageOptimize.zh).length + Object.keys(byType.image2imageOptimize.en).length,
         imageIterate: Object.keys(byType.imageIterate.zh).length + Object.keys(byType.imageIterate.en).length,
         iterate: Object.keys(byType.iterate.zh).length + Object.keys(byType.iterate.en).length,
-        'context-system-optimize': Object.keys(byType['context-system-optimize'].zh).length + Object.keys(byType['context-system-optimize'].en).length,
+        'conversation-message-optimize': Object.keys(byType['conversation-message-optimize'].zh).length + Object.keys(byType['conversation-message-optimize'].en).length,
         'context-user-optimize': Object.keys(byType['context-user-optimize'].zh).length + Object.keys(byType['context-user-optimize'].en).length,
-        'context-iterate': Object.keys(byType['context-iterate'].zh).length + Object.keys(byType['context-iterate'].en).length
+        'context-iterate': Object.keys(byType['context-iterate'].zh).length + Object.keys(byType['context-iterate'].en).length,
+        evaluation: Object.keys(byType.evaluation.zh).length + Object.keys(byType.evaluation.en).length
       });
 
       StaticLoader.templateCache = result;

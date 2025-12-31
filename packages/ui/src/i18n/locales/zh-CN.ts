@@ -1,4 +1,4 @@
-﻿const favoriteCategoriesMessages = {
+const favoriteCategoriesMessages = {
   default: {
     uncategorized: "未分类",
     uncategorizedDesc: "默认分类",
@@ -57,6 +57,8 @@ export default {
     iterate: "迭代",
     system: "系统",
     user: "用户",
+    basic: "基础",
+    context: "上下文",
     copySuccess: "复制成功",
     copyFailed: "复制失败",
     appName: "提示词优化器",
@@ -119,13 +121,18 @@ export default {
     imageMode: "图像",
   },
   contextMode: {
+    optimizationMode: {
+      message: "多消息",
+      variable: "变量",
+    },
     user: {
-      label: "用户模式",
+      label: "变量模式",
       tooltip: "优化单条用户提示词，专注于变量和工具配置",
     },
     system: {
-      label: "系统模式",
+      label: "多消息模式",
       tooltip: "优化多条系统消息，支持完整的对话管理",
+      selectMessageHint: "请选择一条 system/user 消息以查看 V0/V1 优化结果",
     },
     actions: {
       globalVariables: "全局变量",
@@ -164,7 +171,7 @@ export default {
       add: "添加",
       emptySearchResult: "没有找到匹配的收藏",
       emptyDescription: "还没有收藏任何提示词",
-      startOptimize: "开始优化提示词",
+      startOptimize: "优化",
       importDialog: {
         title: "导入收藏",
         selectFile: "选择 JSON 文件",
@@ -408,7 +415,9 @@ export default {
   promptOptimizer: {
     title: "提示词优化器",
     inputPlaceholder: "请输入需要优化的prompt...",
-    optimize: "开始优化",
+    optimize: "优化",
+    analyze: "分析",
+    analyzing: "分析中...",
     history: "历史记录",
     save: "保存提示词",
     share: "分享",
@@ -436,6 +445,8 @@ export default {
     contextHelp: "在高级模式下，您可以添加会话上下文来帮助AI更好地理解优化需求",
     contextTitle: "优化上下文",
     contextDescription: "为优化提供会话背景，帮助AI更好地理解优化目标",
+    enterPrompt: "输入提示词",
+    placeholder: "请输入需要优化的提示词...",
   },
   variables: {
     title: "变量管理",
@@ -587,7 +598,16 @@ export default {
       openEditor: "打开编辑器",
     },
     title: "会话管理",
+    optimizeMessage: "优化选中消息",
+    selectForOptimization: "选择此消息进行优化",
+    selected: "已选中",
     messageCount: "共 {count} 条消息",
+    stats: {
+      messages: "消息",
+      variables: "变量",
+      missing: "变量缺失",
+      tools: "工具",
+    },
     quickTemplates: "快速模板",
     clearAll: "清空全部",
     noMessages: "暂无会话消息",
@@ -695,6 +715,7 @@ export default {
     title: "模型管理",
     textModels: "文本模型",
     imageModels: "图像模型",
+    functionModels: "功能模型",
     modelList: "模型列表",
     testConnection: "测试连接",
     editModel: "编辑",
@@ -822,6 +843,10 @@ export default {
     saveEditAriaLabel: "保存模型修改",
     cancelAddAriaLabel: "取消添加模型",
     confirmAddAriaLabel: "确认添加模型",
+  },
+  functionModel: {
+    evaluationModel: "评估模型",
+    evaluationModelHint: "用于 LLM 智能评估，默认使用全局优化模型",
   },
   templateManager: {
     title: "功能提示词管理",
@@ -982,19 +1007,20 @@ export default {
       help: "",
     },
     model: "测试模型",
-    startTest: "开始测试",
-    startCompare: "开始对比",
+    startTest: "测试",
+    startCompare: "测试",
     testing: "测试中...",
     toggleCompare: {
       enable: "开启对比",
       disable: "关闭对比",
     },
+    compareMode: "对比模式",
     originalResult: "原始提示词结果",
     optimizedResult: "优化后提示词结果",
     testResult: "测试结果",
     userPromptTest: "用户提示词测试",
     advanced: {
-      startTest: "开始测试",
+      startTest: "测试",
       result: "测试结果",
       messageCount: "{count} 条消息",
       missingVariables: "缺少 {count} 个变量",
@@ -1104,9 +1130,13 @@ export default {
     },
   },
   prompt: {
-    optimized: "优化后的提示词",
+    optimized: "优化工作区",
     optimizing: "优化中...",
     continueOptimize: "继续优化",
+    analyze: "分析",
+    originalVersion: "原始",
+    originalVersionTooltip: "未经优化的原始输入，编辑保存后将创建新版本",
+    applyToConversation: "应用到会话",
     copy: "复制",
     applyToTest: "应用到测试",
     appliedToTest: "已应用到高级测试，会话模板已自动配置",
@@ -1114,6 +1144,9 @@ export default {
     iterateDirection: "请输入需要优化的方向：",
     iteratePlaceholder: "例如：使提示词更简洁、增加特定功能描述等...",
     confirmOptimize: "确认优化",
+    saveChanges: "保存修改",
+    saveChangesNote: "本地编辑保存",
+    unsavedChangesConfirm: "当前内容有未保存的更改，切换版本将丢失。是否继续？",
     iterateTitle: "迭代功能提示词",
     selectIterateTemplate: "请选择迭代提示词：",
     diff: {
@@ -1124,6 +1157,7 @@ export default {
     },
     error: {
       noTemplate: "请先选择迭代提示词",
+      noOptimizedPrompt: "请先优化提示词",
     },
   },
   output: {
@@ -1164,6 +1198,9 @@ export default {
       compareFailed: "对比分析失败",
       noVersionsToCompare: "没有足够的版本进行对比",
       noPreviousVersion: "没有前一版本可供对比",
+      loadChainFailed: "加载优化历史失败",
+      historyUnavailable: "历史记录服务暂不可用",
+      invalidVersion: "无效的版本",
       testFailed: "测试失败",
       testError: "测试过程中发生错误",
       loadTemplatesFailed: "加载提示词失败",
@@ -1174,6 +1211,7 @@ export default {
       loadHistoryFailed: "加载历史记录失败",
       clearHistoryFailed: "清空历史记录失败",
       historyChainDeleteFailed: "删除历史记录失败",
+      historyRestoreFailed: "历史记录恢复失败：{error}",
       selectTemplateFailed: "选择提示词失败：{error}",
       noOptimizeTemplate: "请先选择优化提示词",
       noOptimizeModel: "请先选择优化模型",
@@ -1181,9 +1219,11 @@ export default {
       incompleteTestInfo: "请填写完整的测试信息",
       noDefaultTemplate: "无法加载默认提示词",
       optimizeProcessFailed: "优化过程出错",
+      promptServiceUnavailable: "优化服务暂不可用",
       testProcessError: "测试过程中发生错误",
       initTemplateFailed: "初始化模板选择失败",
       appInitFailed: "应用初始化失败，请刷新或联系支持",
+      loadRecordFailed: "加载版本内容失败",
     },
     success: {
       optimizeSuccess: "优化成功",
@@ -1196,15 +1236,37 @@ export default {
       historyLoaded: "历史记录已加载",
       exitCompare: "已退出对比模式",
       compareEnabled: "对比模式已启用",
+      optimizeAndApply: "已优化并应用 ({version})",
+      versionApplied: "已应用到会话",
+      chainAutoRestored: "已从历史记录自动恢复优化链",
+      imageHistoryRestored: "图像历史记录已恢复",
+      conversationRestored: "已从历史记录恢复完整会话",
+      imageFavoriteLoaded: "收藏的图像提示词已加载",
+      favoriteLoaded: "已将提示词加载到输入框",
+      localEditSaved: "已保存为新版本",
     },
     warn: {
       loadOptimizeTemplateFailed: "加载已保存的优化提示词失败",
       loadIterateTemplateFailed: "加载已保存的迭代提示词失败",
     },
+    warning: {
+      cannotOptimizeRole: "无法优化 {role} 角色的消息",
+      saveHistoryFailed: "保存历史记录失败",
+      patchApplyFailed: "未能自动应用修复，请手动编辑",
+      messageNotFound: "未找到消息",
+      noVersionSelected: "请先选择要应用的版本",
+      noContentToApply: "没有可应用的内容",
+      messageNotFoundInSnapshot: "历史记录恢复成功，但未找到被优化的消息",
+      restoredFromLegacyHistory: "从旧版本历史记录恢复（仅恢复被优化的消息）",
+      messageNotFoundInCurrentConversation: "当前会话中未找到被优化的消息，无法恢复",
+    },
     info: {
       modelUpdated: "模型已更新",
       templateSelected: "选择模板",
       optimizationModeAutoSwitched: "已自动切换到{mode}提示词优化模式",
+      switchedToImageMode: "已自动切换到图像模式",
+      switchedToFunctionMode: "已自动切换到{mode}模式",
+      multiTurnOptimizationPrompt: "多轮对话优化（{count}条消息）",
     },
   },
   log: {
@@ -1376,6 +1438,18 @@ export default {
       label: "随机种子",
       description: "用于控制生成结果的随机数种子，相同种子产生相同结果",
     },
+    enable_thinking: {
+      label: "启用思考",
+      description: "启用思考模式，让模型进行推理（仅支持部分模型）",
+    },
+    thinking_budget: {
+      label: "思考Token预算",
+      description: "分配给思考过程的最大Token数，用于限制推理长度",
+    },
+    enable_search: {
+      label: "启用联网搜索",
+      description: "启用联网搜索功能，让模型获取实时信息（仅支持部分模型）",
+    },
     max_completion_tokens: {
       label: "最大补全Token数",
       description:
@@ -1460,7 +1534,6 @@ export default {
 
     // Tab labels
     messagesTab: "消息编辑",
-    templatesTab: "快速模板",
     variablesTab: "变量管理",
     toolsTab: "工具管理",
 
@@ -1480,15 +1553,6 @@ export default {
     addTool: "添加工具",
     noDescription: "暂无描述",
     parametersCount: "{count} 个参数",
-
-    // Templates
-    templateCategory: "模板分类",
-    templateCount: "{count} 个模板",
-    noTemplates: "暂无模板",
-    noTemplatesHint: "在模板管理器中添加模板",
-    applyTemplate: "应用模板",
-    moreMessages: "还有 {count} 条消息...",
-    templateApplied: "已应用模板：{name}",
 
     // Import/Export
     importTitle: "导入上下文数据",
@@ -1557,22 +1621,21 @@ export default {
     // Import/Export formats
     importFormats: {
       smart: { name: "智能识别", description: "自动检测格式并转换" },
-      conversation: { name: "会话格式", description: "标准的会话消息格式" },
       openai: { name: "OpenAI", description: "OpenAI API 请求格式" },
       langfuse: { name: "LangFuse", description: "LangFuse 追踪数据格式" },
+      conversation: { name: "内部格式", description: "Prompt Optimizer 内部标准 JSON 结构" },
     },
     exportFormats: {
-      standard: { name: "标准格式", description: "内部标准数据格式" },
+      standard: { name: "内部格式", description: "Prompt Optimizer 内部标准数据格式" },
       openai: { name: "OpenAI", description: "OpenAI API 兼容格式" },
-      template: { name: "模板格式", description: "可复用的模板格式" },
     },
 
-    // Import placeholders
+    // Import placeholders (文本可本地化，JSON 示例固定为英文)
     importPlaceholders: {
-      openai: 'OpenAI API 请求格式，例如：\n{\n  "messages": [...],\n  "model": "gpt-4"\n}',
-      langfuse: 'LangFuse 追踪数据，例如：\n{\n  "input": {\n    "messages": [...]\n  }\n}',
-      conversation: '标准会话格式，例如：\n{\n  "messages": [\n    {"role": "system", "content": "..."},\n    {"role": "user", "content": "..."}\n  ]\n}',
-      smart: "粘贴任意支持格式的 JSON 数据，系统将自动识别",
+      openai: "OpenAI API 请求格式（示例见下方）：",
+      langfuse: "LangFuse 追踪数据格式（示例见下方）：",
+      conversation: "标准会话 JSON 格式（示例见下方）：",
+      smart: "粘贴任意受支持的 JSON（OpenAI、LangFuse 或会话数组），系统会自动识别格式。",
     },
 
     // Console errors (开发者日志)
@@ -1872,6 +1935,30 @@ export default {
         description:
           "设置图像背景：auto（自动）、transparent（透明）、opaque（不透明）",
       },
+      negativePrompt: {
+        label: "负向提示词",
+        description: "指定不希望在生成图像中出现的内容",
+      },
+      promptExtend: {
+        label: "提示词扩展",
+        description: "启用后模型会自动扩展和优化提示词以获得更好的效果",
+      },
+      watermark: {
+        label: "水印",
+        description: "是否在生成的图像上添加水印",
+      },
+      seed: {
+        label: "随机种子",
+        description: "用于生成可复现结果的随机种子，相同种子会生成相似图像",
+      },
+      count: {
+        label: "生成数量",
+        description: "一次生成的图像数量",
+      },
+      style: {
+        label: "图像风格",
+        description: "生成图像的艺术风格",
+      },
     },
   },
   // 变量提取功能
@@ -1909,5 +1996,97 @@ export default {
   variableGuide: {
     inlineHint:
       "支持变量功能：输入 {doubleBraces} 触发自动补全 · 选中文本可提取为变量 · 悬停查看变量值",
+  },
+  // LLM 智能评估
+  evaluation: {
+    button: "评估",
+    evaluate: "评估",
+    reEvaluate: "重新评估",
+    compareEvaluate: "对比评估",
+    loading: "正在评估中...",
+    analyzing: "正在分析...",
+    overallScore: "总分",
+    dimensions: "维度评分",
+    issues: "问题",
+    improvements: "改进建议",
+    applyToIterate: "迭代优化",
+    applySuccess: "正在应用改进建议...",
+    noResult: "暂无评估结果，点击评估按钮开始评估",
+    viewDetails: "查看详情",
+    title: {
+      default: "评估结果",
+      original: "原始提示词评估",
+      optimized: "优化后评估",
+      compare: "对比评估",
+      promptOnly: "提示词质量分析",
+      promptIterate: "迭代优化分析",
+    },
+    type: {
+      original: "评估原始提示词",
+      optimized: "评估优化效果",
+      compare: "对比评估",
+    },
+    level: {
+      excellent: "优秀",
+      good: "良好",
+      acceptable: "合格",
+      poor: "较差",
+      veryPoor: "很差",
+    },
+    dimension: {
+      goalAchievement: "目标达成度",
+      outputQuality: "输出质量",
+      formatCompliance: "格式规范性",
+      relevance: "相关性",
+    },
+    optimizedBetter: "优化后效果更好",
+    originalBetter: "原始效果更好",
+    error: {
+      title: "评估失败",
+      serviceNotReady: "评估服务未就绪，请稍后再试",
+      failed: "评估失败：{error}",
+      noOptimizedPrompt: "没有可优化的提示词",
+    },
+    // 诊断相关翻译
+    diagnose: {
+      title: "诊断分析",
+      confidence: "置信度",
+      findings: "发现问题",
+      patchPlan: "修复计划",
+      noFindings: "未发现问题",
+      noPatchPlan: "无修复计划",
+      applyFix: "应用修复",
+      replaceNow: "立即替换",
+      invariantsWarning: "受限于不可改变项约束",
+      changeBudgetWarning: "受限于变更预算限制",
+      status: {
+        ok: "诊断正常",
+        degraded: "部分降级",
+        failed: "诊断失败",
+      },
+      severity: {
+        critical: "严重",
+        major: "重要",
+        minor: "次要",
+        suggestion: "建议",
+        unknown: "未知",
+      },
+      anchorType: {
+        text: "文本",
+        section: "段落",
+        pattern: "正则",
+      },
+      operation: {
+        insert: "插入",
+        replace: "替换",
+        delete: "删除",
+      },
+      anchorPosition: {
+        before: "之前",
+        after: "之后",
+        replace: "替换",
+      },
+      invariantsRisks: "约束冲突风险",
+    },
   },
 };

@@ -6,9 +6,11 @@ import {
   type ModelOption,
   type TextModel,
   type TextModelConfig,
-  type TextProvider
+  type TextProvider,
+  getBuiltinModelIds
 } from '@prompt-optimizer/core'
 import { useModelAdvancedParameters } from './useModelAdvancedParameters'
+import { computeConnectionConfig } from './useConnectionConfig'
 import type { AppServices } from '../../types/services'
 
 type TextConnectionValue = string | number | boolean | undefined
@@ -35,8 +37,6 @@ interface SetProviderOptions {
   resetOverrides?: boolean
   resetConnectionConfig?: boolean
 }
-
-const DEFAULT_TEXT_MODEL_IDS = ['openai', 'gemini', 'deepseek', 'zhipu', 'siliconflow', 'custom'] as const
 
 export function useTextModelManager() {
   const { t } = useI18n()
@@ -153,14 +153,14 @@ export function useTextModelManager() {
   })
 
   const canTestFormConnection = computed(() => {
-    // 必须在编辑模式下
-    if (!editingModelId.value) return false
     // 测试期间禁用
     if (isTestingFormConnection.value) return false
     // 必须有必需的连接配置
     if (!isConnectionConfigured.value) return false
-    // 必须有模型名称
-    if (!form.value.name?.trim()) return false
+    // 必须有模型 ID（发送请求所需）
+    if (!form.value.modelId?.trim()) return false
+    // 必须有 provider
+    if (!form.value.providerId) return false
 
     return true
   })
@@ -171,7 +171,7 @@ export function useTextModelManager() {
   const modalTitle = computed(() => (editingModelId.value ? t('modelManager.editModel') : t('modelManager.addModel')))
 
   const isDefaultModel = (id: string) => {
-    return DEFAULT_TEXT_MODEL_IDS.includes(id as typeof DEFAULT_TEXT_MODEL_IDS[number])
+    return getBuiltinModelIds().includes(id)
   }
 
   const resetFormState = () => {
@@ -341,31 +341,22 @@ export function useTextModelManager() {
 
     loadStaticModelsForProvider(providerId)
 
+    // 使用共享函数处理连接配置
     const providerMeta = providers.value.find(p => p.id === providerId)
-
-    // 根据 resetConnectionConfig 参数决定是否重置连接配置
-    if (resetConnectionConfig) {
-      // 切换提供商时：完全重置为新提供商的默认配置
-      if (providerMeta?.defaultBaseURL) {
-        form.value.connectionConfig = {
-          baseURL: providerMeta.defaultBaseURL
-        }
-      } else {
-        form.value.connectionConfig = {}
-      }
-    } else {
-      // 编辑模式时：只在 baseURL 为空时才填充默认值
-      if (providerMeta?.defaultBaseURL && !form.value.connectionConfig.baseURL) {
-        form.value.connectionConfig = {
-          ...form.value.connectionConfig,
-          baseURL: providerMeta.defaultBaseURL
-        }
-      }
-    }
+    form.value.connectionConfig = computeConnectionConfig(
+      form.value.connectionConfig,
+      providerMeta,
+      resetConnectionConfig
+    ) as TextConnectionConfig
 
     if (autoSelectFirstModel && modelOptions.value.length > 0) {
-      form.value.modelId = modelOptions.value[0].value
-      form.value.defaultModel = modelOptions.value[0].value
+      const firstModelId = modelOptions.value[0].value
+      form.value.modelId = firstModelId
+      form.value.defaultModel = firstModelId
+      // 切换提供商后自动应用第一个模型的默认参数
+      if (firstModelId && providerId) {
+        advancedParameters.applyDefaultsFromModel(false)
+      }
     }
   }
 
@@ -379,6 +370,10 @@ export function useTextModelManager() {
         autoSelectFirstModel: true,
         resetOverrides: true
       })
+      // 创建模式：自动应用第一个模型的默认参数
+      if (form.value.modelId && form.value.providerId) {
+        advancedParameters.applyDefaultsFromModel(false)
+      }
     }
 
     formReady.value = true
@@ -614,34 +609,32 @@ export function useTextModelManager() {
     formConnectionStatus.value = { type: 'info', message: t('modelManager.testing') }
 
     try {
-      const existingConfig = editingModelId.value ? await modelManager.getModel(editingModelId.value) : undefined
-      if (!existingConfig) {
-        throw new Error('模型配置不存在')
-      }
-
       if (!form.value.providerId || !form.value.modelId) {
         throw new Error('模型未选择')
       }
 
-      const providerMeta = ensureProviderMeta(form.value.providerId, existingConfig.providerMeta)
-      const modelMeta = ensureModelMeta(form.value.providerId, form.value.modelId, existingConfig.modelMeta)
+      // 编辑模式下获取现有配置，新增模式下为 undefined
+      const existingConfig = editingModelId.value ? await modelManager.getModel(editingModelId.value) : undefined
+
+      const providerMeta = ensureProviderMeta(form.value.providerId, existingConfig?.providerMeta)
+      const modelMeta = ensureModelMeta(form.value.providerId, form.value.modelId, existingConfig?.modelMeta)
 
       const baseURL = typeof form.value.connectionConfig?.baseURL === 'string'
         ? form.value.connectionConfig.baseURL.trim()
         : undefined
 
       const connectionConfig: TextConnectionConfig = {
-        baseURL: baseURL || existingConfig.connectionConfig?.baseURL,
-        ...existingConfig.connectionConfig,
+        baseURL: baseURL || existingConfig?.connectionConfig?.baseURL,
+        ...existingConfig?.connectionConfig,
         ...form.value.connectionConfig,
         apiKey: form.value.displayMaskedKey && form.value.originalApiKey
           ? form.value.originalApiKey
-          : (form.value.connectionConfig.apiKey || existingConfig.connectionConfig?.apiKey)
+          : (form.value.connectionConfig.apiKey || existingConfig?.connectionConfig?.apiKey)
       }
 
       const tempConfig = {
-        id: `temp-test-${editingModelId.value}-${Date.now()}`,
-        name: form.value.name,
+        id: `temp-test-${editingModelId.value || 'new'}-${Date.now()}`,
+        name: form.value.name || form.value.modelId,
         enabled: form.value.enabled,
         providerMeta,
         modelMeta,
@@ -654,8 +647,9 @@ export function useTextModelManager() {
       try {
         // 测试临时模型
         await llmService.testConnection(tempConfig.id)
-        formConnectionStatus.value = { type: 'success', message: t('modelManager.testSuccess', { provider: form.value.name }) }
-        toast.success(t('modelManager.testSuccess', { provider: form.value.name }))
+        const displayName = form.value.name || form.value.modelId
+        formConnectionStatus.value = { type: 'success', message: t('modelManager.testSuccess', { provider: displayName }) }
+        toast.success(t('modelManager.testSuccess', { provider: displayName }))
       } finally {
         // 清理临时模型
         try {
@@ -667,11 +661,12 @@ export function useTextModelManager() {
 
     } catch (error) {
       console.error('连接测试失败:', error)
+      const displayName = form.value.name || form.value.modelId
       formConnectionStatus.value = {
         type: 'error',
-        message: t('modelManager.testFailed', { provider: form.value.name, error: error instanceof Error ? error.message : 'Unknown error' || 'Unknown error' })
+        message: t('modelManager.testFailed', { provider: displayName, error: error instanceof Error ? error.message : 'Unknown error' })
       }
-      toast.error(t('modelManager.testFailed', { provider: form.value.name, error: error instanceof Error ? error.message : 'Unknown error' || 'Unknown error' }))
+      toast.error(t('modelManager.testFailed', { provider: displayName, error: error instanceof Error ? error.message : 'Unknown error' }))
     } finally {
       isTestingFormConnection.value = false
     }
@@ -692,7 +687,10 @@ export function useTextModelManager() {
     form.value.defaultModel = modelId || ''
 
     if (modelId && form.value.providerId) {
-      advancedParameters.applyDefaultsFromModel()
+      // 编辑模式：合并参数（保留用户已有配置）
+      // 创建模式：替换参数（使用新模型的默认值）
+      const isEditing = !!editingModelId.value
+      advancedParameters.applyDefaultsFromModel(isEditing)
     }
   }
 

@@ -27,6 +27,7 @@ export { StaticLoader } from './services/template/static-loader'
 export * from './services/template/errors'
 export { ElectronTemplateManagerProxy } from './services/template/electron-proxy'
 export { ElectronTemplateLanguageServiceProxy } from './services/template/electron-language-proxy'
+export { ALL_TEMPLATES } from './services/template/default-templates'
 
 // 导出历史记录相关
 export { HistoryManager, createHistoryManager } from './services/history/manager'
@@ -122,6 +123,7 @@ export {
   isElectronApiReady,
   waitForElectronApi,
   isBrowser,
+  isDevelopment,
   getEnvVar,
   scanCustomModelEnvVars,
   clearCustomModelEnvCache,
@@ -135,6 +137,8 @@ export { validateCustomModelConfig } from './utils/environment'
 
 // 导出IPC序列化工具
 export { safeSerializeForIPC, debugIPCSerializability, safeSerializeArgs } from './utils/ipc-serialization'
+export { applyPatchOperationsToText } from './utils/patch-plan'
+export type { ApplyPatchResult, ApplyPatchReportItem, ApplyPatchStatus } from './utils/patch-plan'
 
 // 导出存储键常量
 export {
@@ -143,6 +147,8 @@ export {
   MODEL_SELECTION_KEYS,
   TEMPLATE_SELECTION_KEYS,
   IMAGE_MODE_KEYS,
+  FUNCTION_MODEL_KEYS,
+  getModeModelKey,
   ALL_STORAGE_KEYS,
   ALL_STORAGE_KEYS_ARRAY
 } from './constants/storage-keys'
@@ -152,6 +158,7 @@ export type {
   ModelSelectionKey,
   TemplateSelectionKey,
   ImageModeKey,
+  FunctionModelKey,
   StorageKey
 } from './constants/storage-keys'
 
@@ -170,3 +177,8 @@ export * from './services/favorite/errors'
 
 // 导出高级模块相关类型
 export * from './types/advanced'
+
+// 导出评估服务相关
+export * from './services/evaluation/types'
+export * from './services/evaluation/errors'
+export { EvaluationService, createEvaluationService } from './services/evaluation/service'

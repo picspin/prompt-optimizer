@@ -2,15 +2,14 @@
   <NModal
     :show="show"
     preset="card"
-    :style="{ width: '90vw', maxWidth: '1000px', maxHeight: '90vh' }"
+    :style="{ width: '90vw', maxWidth: '1000px' }"
     :title="modalTitle.value"
     size="large"
     :bordered="false"
     :segmented="true"
     @update:show="handleUpdateShow"
   >
-    <NScrollbar v-if="formReady" style="max-height: 75vh;">
-      <form @submit.prevent="handleSubmit">
+    <form v-if="formReady" @submit.prevent="handleSubmit">
         <NForm label-placement="left" label-width="auto" size="small">
           <NFormItem v-if="!isEditing" :label="t('modelManager.modelKey')">
             <NInput
@@ -139,12 +138,11 @@
           :param-overrides="form.paramOverrides"
           @update:paramOverrides="updateParamOverrides"
         />
-      </form>
-    </NScrollbar>
+    </form>
 
-    <div v-else style="height: 200px; display: flex; align-items: center; justify-content: center;">
+    <NFlex v-else justify="center" align="center" style="height: 200px;">
       <NSpin />
-    </div>
+    </NFlex>
 
     <template #action>
       <NSpace justify="space-between" align="center" style="width: 100%;">
@@ -187,7 +185,6 @@ import { computed, inject, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   NModal,
-  NScrollbar,
   NForm,
   NFormItem,
   NH4,
@@ -196,6 +193,7 @@ import {
   NCheckbox,
   NSelect,
   NSpace,
+  NFlex,
   NButton,
   NDivider,
   NText,
@@ -264,21 +262,16 @@ const handleCancel = () => {
   handleUpdateShow(false)
 }
 
-// 处理模型变更（只在非编辑模式或用户主动切换时自动填充参数）
+// 处理模型变更：无论新建还是编辑模式，切换模型都应用新模型的默认参数
 const handleModelChange = (modelId: string) => {
-  if (isEditing.value && form.value.originalId) {
-    // 编辑模式：只更新 modelId，不自动填充参数
-    form.value.modelId = modelId
-    form.value.defaultModel = modelId || ''
-  } else {
-    // 新建模式：调用 onModelChange，会自动填充默认参数
-    onModelChange(modelId)
-  }
+  onModelChange(modelId)
 }
 
 const onProviderChange = (providerId: string) => {
+  // 切换提供商时总是自动选择第一个模型
+  // 因为原来的模型ID在新提供商下可能不存在
   manager.selectProvider(providerId, {
-    autoSelectFirstModel: !isEditing.value,
+    autoSelectFirstModel: true,
     resetOverrides: true,
     resetConnectionConfig: true
   })
