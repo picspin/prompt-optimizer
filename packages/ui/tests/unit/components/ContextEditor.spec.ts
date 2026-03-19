@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
+import { nextTick, ref } from 'vue'
 import ContextEditor from '../../../src/components/context-mode/ContextEditor.vue'
 
 // Mock Naive UI 组件
@@ -126,7 +126,7 @@ vi.mock('vue-i18n', () => ({
       }
       return translations[key] || key
     },
-    locale: { value: 'zh-CN' }
+    locale: ref('zh-CN')
   })
 }))
 
@@ -167,6 +167,21 @@ vi.mock('../../../src/composables/useAccessibility', () => ({
     isAccessibilityMode: { value: false },
     liveRegionMessage: { value: '' },
     announcements: { value: [] }
+  })
+}))
+
+// Mock useTemporaryVariables (临时变量管理器)
+vi.mock('../../../src/composables/variable/useTemporaryVariables', () => ({
+  useTemporaryVariables: () => ({
+    temporaryVariables: { value: {} },
+    setVariable: vi.fn(),
+    getVariable: vi.fn(() => undefined),
+    deleteVariable: vi.fn(),
+    clearAll: vi.fn(),
+    hasVariable: vi.fn(() => false),
+    listVariables: vi.fn(() => ({})),
+    batchSet: vi.fn(),
+    batchDelete: vi.fn()
   })
 }))
 

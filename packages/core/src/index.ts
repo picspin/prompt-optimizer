@@ -47,7 +47,6 @@ export type {
   ITextProviderAdapter,
   TextProvider,
   TextModel,
-  TextModelConfig,
   ConnectionSchema
 } from './services/llm/types'
 export { LLMService, createLLMService } from './services/llm/service'
@@ -75,7 +74,10 @@ export type {
   ImageProvider,
   ImageModel,
   ImageRequest,
+  Text2ImageRequest,
+  Image2ImageRequest,
   ImageResult,
+  ImageResultItem,
   ImageProgressHandlers,
   ImageModelConfig,
   IImageModelManager,
@@ -83,8 +85,16 @@ export type {
   IImageAdapterRegistry,
   IImageService,
   ConnectionSchema as ImageConnectionSchema,
-  ImageParameterDefinition
+  ImageParameterDefinition,
+  ImageMetadata,
+  ImageRef,
+  FullImageData,
+  ImageStorageConfig,
+  IImageStorageService
 } from './services/image/types'
+// 导出图像存储相关函数和类型
+export { isImageRef, createImageRef } from './services/image/types'
+export { ImageStorageService, createImageStorageService } from './services/image/storage'
 
 // 导出存储相关
 export * from './services/storage/types'
@@ -144,7 +154,6 @@ export type { ApplyPatchResult, ApplyPatchReportItem, ApplyPatchStatus } from '.
 export {
   CORE_SERVICE_KEYS,
   UI_SETTINGS_KEYS,
-  MODEL_SELECTION_KEYS,
   TEMPLATE_SELECTION_KEYS,
   IMAGE_MODE_KEYS,
   FUNCTION_MODEL_KEYS,
@@ -155,12 +164,36 @@ export {
 export type {
   CoreServiceKey,
   UISettingsKey,
-  ModelSelectionKey,
   TemplateSelectionKey,
   ImageModeKey,
   FunctionModelKey,
   StorageKey
 } from './constants/storage-keys'
+
+// UI function-mode types are defined alongside prompt service types.
+export type { FunctionMode } from './services/prompt/types'
+
+// Export error codes for internationalization | 导出错误代码用于国际化
+export {
+  ERROR_CODES,
+  EVALUATION_ERROR_CODES,
+  LLM_ERROR_CODES,
+  HISTORY_ERROR_CODES,
+  COMPARE_ERROR_CODES,
+  STORAGE_ERROR_CODES,
+  MODEL_ERROR_CODES,
+  TEMPLATE_ERROR_CODES,
+  CONTEXT_ERROR_CODES,
+  PROMPT_ERROR_CODES,
+  VARIABLE_EXTRACTION_ERROR_CODES,
+  VARIABLE_VALUE_GENERATION_ERROR_CODES,
+  FAVORITE_ERROR_CODES,
+  IMAGE_ERROR_CODES,
+  IMPORT_EXPORT_ERROR_CODES,
+  DATA_ERROR_CODES,
+  CORE_ERROR_CODES,
+} from './constants/error-codes'
+export type { ErrorCode } from './constants/error-codes'
 
 // 导出上下文相关
 export * from './services/context/types'
@@ -182,3 +215,13 @@ export * from './types/advanced'
 export * from './services/evaluation/types'
 export * from './services/evaluation/errors'
 export { EvaluationService, createEvaluationService } from './services/evaluation/service'
+
+// 🆕 导出变量提取服务相关
+export * from './services/variable-extraction/types'
+export * from './services/variable-extraction/errors'
+export { VariableExtractionService, createVariableExtractionService } from './services/variable-extraction/service'
+
+// 🆕 导出变量值生成服务相关
+export * from './services/variable-value-generation/types'
+export * from './services/variable-value-generation/errors'
+export { VariableValueGenerationService, createVariableValueGenerationService } from './services/variable-value-generation/service'

@@ -8,6 +8,8 @@ import { ref, computed, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMessage } from 'naive-ui'
 
+import { VARIABLE_VALIDATION, getVariableNameValidationError } from '../../types/variable'
+
 interface TestVariable {
   value: string
   timestamp: number
@@ -26,6 +28,8 @@ export interface TestVariableManagerOptions {
   onSaveToGlobal?: (name: string, value: string) => void
   /** 删除变量回调 */
   onVariableRemove?: (name: string) => void
+  /** 重命名变量回调（比 remove+change 更明确，避免旧 key 残留） */
+  onVariableRename?: (oldName: string, newName: string, value: string) => void
   /** 清空所有变量回调 */
   onVariablesClear?: () => void
 }
@@ -33,6 +37,9 @@ export interface TestVariableManagerOptions {
 export function useTestVariableManager(options: TestVariableManagerOptions) {
   const { t } = useI18n()
   const message = useMessage()
+
+  const hasOwn = (obj: Record<string, unknown>, key: string) =>
+    Object.prototype.hasOwnProperty.call(obj, key)
 
   // 添加变量对话框状态
   const showAddVariableDialog = ref(false)
@@ -87,10 +94,15 @@ export function useTestVariableManager(options: TestVariableManagerOptions) {
   })
 
   // 获取变量来源
-  const getVariableSource = (varName: string): 'predefined' | 'test' | 'global' | 'empty' => {
-    if (options.predefinedVariables.value[varName]) return 'predefined'
-    if (testVariables.value[varName]) return 'test'
-    if (options.globalVariables.value[varName]) return 'global'
+  const getVariableSource = (
+    varName: string
+  ): 'predefined' | 'test' | 'global' | 'empty' => {
+    // Use key existence (not truthiness) because empty-string values are valid.
+    if (hasOwn(options.predefinedVariables.value, varName)) return 'predefined'
+    if (hasOwn(testVariables.value as unknown as Record<string, unknown>, varName)) {
+      return 'test'
+    }
+    if (hasOwn(options.globalVariables.value, varName)) return 'global'
     return 'empty'
   }
 
@@ -101,23 +113,57 @@ export function useTestVariableManager(options: TestVariableManagerOptions) {
 
   // 获取变量占位符
   const getVariablePlaceholder = (varName: string): string => {
-    if (options.predefinedVariables.value[varName]) {
+    if (hasOwn(options.predefinedVariables.value, varName)) {
       return t('test.variables.inputPlaceholder') + ` (${t('variables.source.predefined')})`
     }
-    if (options.globalVariables.value[varName]) {
+    // In the temporary variables panel, a name may exist in both temporary and global.
+    // Temporary values override global ones, so avoid misleading "(global)" placeholders.
+    if (hasOwn(testVariables.value as unknown as Record<string, unknown>, varName)) {
+      if (hasOwn(options.globalVariables.value, varName)) {
+        return t('test.variables.inputPlaceholder') + ` (${t('test.variables.overridesGlobal')})`
+      }
+      return t('test.variables.inputPlaceholder')
+    }
+    if (hasOwn(options.globalVariables.value, varName)) {
       return t('test.variables.inputPlaceholder') + ` (${t('variables.source.global')})`
     }
     return t('test.variables.inputPlaceholder')
   }
 
   // 验证变量名
-  const validateVariableName = (name: string): string => {
+  const validateVariableName = (name: string, excludeName?: string): string => {
     if (!name) return ''
-    if (/^\d/.test(name)) return t('variableExtraction.validation.noNumberStart')
-    if (!/^[\u4e00-\u9fa5a-zA-Z_][\u4e00-\u9fa5a-zA-Z0-9_]*$/.test(name)) {
-      return t('variableExtraction.validation.invalidCharacters')
+
+    const trimmedName = name.trim()
+    if (!trimmedName) return ''
+
+    const baseError = getVariableNameValidationError(trimmedName)
+    if (baseError) {
+      switch (baseError) {
+        case 'required':
+          return t('variableExtraction.validation.required')
+        case 'tooLong':
+          return t('variableExtraction.validation.tooLong', { max: VARIABLE_VALIDATION.MAX_NAME_LENGTH })
+        case 'forbiddenPrefix':
+          return t('variableExtraction.validation.forbiddenPrefix')
+        case 'noNumberStart':
+          return t('variableExtraction.validation.noNumberStart')
+        case 'reservedName':
+          return t('variableExtraction.validation.reservedName')
+        case 'invalidCharacters':
+          return t('variableExtraction.validation.invalidCharacters')
+      }
     }
-    if (testVariables.value[name]) return t('variableExtraction.validation.duplicateVariable')
+
+    // Prevent creating a temporary variable that would be shadowed by predefined variables.
+    if (hasOwn(options.predefinedVariables.value, trimmedName)) {
+      return t('variableExtraction.validation.predefinedVariable')
+    }
+
+    if (testVariables.value[trimmedName] && trimmedName !== excludeName) {
+      return t('variableExtraction.validation.duplicateVariable')
+    }
+
     return ''
   }
 
@@ -136,6 +182,52 @@ export function useTestVariableManager(options: TestVariableManagerOptions) {
       testVariables.value[varName] = { value, timestamp: Date.now() }
     }
     options.onVariableChange?.(varName, value)
+  }
+
+  const renameVariable = (oldName: string, nextNameRaw: string): boolean => {
+    const originalVariable = testVariables.value[oldName]
+    if (!originalVariable) return false
+
+    const nextName = nextNameRaw.trim()
+    if (!nextName) {
+      message.warning(t('variableExtraction.validation.required'))
+      return false
+    }
+
+    if (nextName === oldName) return true
+
+    const renameError = validateVariableName(nextName, oldName)
+    if (renameError) {
+      message.warning(renameError)
+      return false
+    }
+
+    const canUpdateExternalStore = Boolean(options.onVariableRename)
+      || (Boolean(options.onVariableRemove) && Boolean(options.onVariableChange))
+    if (!canUpdateExternalStore) {
+      message.warning(t('test.variables.renameNotSupported'))
+      return false
+    }
+
+    delete testVariables.value[oldName]
+    testVariables.value[nextName] = {
+      value: originalVariable.value,
+      timestamp: originalVariable.timestamp,
+    }
+
+    if (options.onVariableRename) {
+      options.onVariableRename(oldName, nextName, originalVariable.value)
+    } else {
+      options.onVariableRemove?.(oldName)
+      options.onVariableChange?.(nextName, originalVariable.value)
+    }
+
+    message.success(t('test.variables.renameSuccess', {
+      oldName,
+      newName: nextName,
+    }))
+
+    return true
   }
 
   // 添加变量
@@ -161,15 +253,31 @@ export function useTestVariableManager(options: TestVariableManagerOptions) {
   // 删除变量
   const handleDeleteVariable = (varName: string) => {
     delete testVariables.value[varName]
-    options.onVariableRemove?.(varName)
-    options.onVariableChange?.(varName, '')
+
+    // Prefer explicit remove callback; fallback to onVariableChange(name, '') for legacy callers.
+    if (options.onVariableRemove) {
+      options.onVariableRemove(varName)
+    } else {
+      options.onVariableChange?.(varName, '')
+    }
+
     message.success(t('test.variables.deleteSuccess', { name: varName }))
   }
 
   // 清空所有变量
   const handleClearAllVariables = () => {
+    const removedNames = Object.keys(testVariables.value)
     testVariables.value = {}
-    options.onVariablesClear?.()
+
+    // Prefer explicit clear callback; otherwise best-effort remove for callers.
+    if (options.onVariablesClear) {
+      options.onVariablesClear()
+    } else if (options.onVariableRemove) {
+      removedNames.forEach((name) => options.onVariableRemove?.(name))
+    } else {
+      removedNames.forEach((name) => options.onVariableChange?.(name, ''))
+    }
+
     message.success(t('test.variables.clearSuccess'))
   }
 
@@ -180,8 +288,22 @@ export function useTestVariableManager(options: TestVariableManagerOptions) {
       message.warning(t('test.variables.emptyValueWarning'))
       return
     }
-    options.onSaveToGlobal?.(varName, varData.value)
-    message.success(t('test.variables.savedToGlobal'))
+
+    if (!options.onSaveToGlobal) return
+
+    try {
+      options.onSaveToGlobal(varName, varData.value)
+      message.success(t('test.variables.savedToGlobal'))
+    } catch (err) {
+      console.warn('[useTestVariableManager] onSaveToGlobal failed:', err)
+
+      const errMessage = err instanceof Error ? err.message : ''
+      if (/not\s+ready/i.test(errMessage)) {
+        message.error(t('variableExtraction.managerNotReady'))
+      } else {
+        message.error(t('variableExtraction.saveFailed', { name: varName }))
+      }
+    }
   }
 
   // 获取所有变量值
@@ -211,6 +333,7 @@ export function useTestVariableManager(options: TestVariableManagerOptions) {
     getVariablePlaceholder,
     validateNewVariableName,
     handleVariableValueChange,
+    renameVariable,
     handleAddVariable,
     handleDeleteVariable,
     handleClearAllVariables,
@@ -219,3 +342,5 @@ export function useTestVariableManager(options: TestVariableManagerOptions) {
     setVariableValues,
   }
 }
+
+export type TestVariableManager = ReturnType<typeof useTestVariableManager>

@@ -38,6 +38,28 @@
 
           <!-- 动态连接配置字段 -->
           <NFormItem v-for="field in connectionFields" :key="field.name" :label="t(field.labelKey)">
+            <template v-if="field.name === 'apiKey'" #label>
+              <NSpace align="center" :size="4">
+                <span>{{ t(field.labelKey) }}</span>
+                <NButton
+                  v-if="currentProviderApiKeyUrl"
+                  text
+                  size="tiny"
+                  type="primary"
+                  tag="a"
+                  :href="currentProviderApiKeyUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style="padding: 0 4px;"
+                  :title="t('modelManager.getApiKey')"
+                >
+                  <template #icon>
+                    <ExternalLinkIcon />
+                  </template>
+                </NButton>
+              </NSpace>
+            </template>
+
             <template v-if="field.type === 'string'">
               <NInput
                 v-model:value="configForm.connectionConfig![field.name]"
@@ -210,27 +232,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, nextTick } from 'vue'
+import { computed, watch, nextTick, h } from 'vue'
 
 import { useI18n } from 'vue-i18n'
 import {
   NModal, NSpace, NInput, NInputNumber,
   NCheckbox, NSelect, NButton, NTag, NTooltip, NText,
-  NDivider, NH4, NForm, NFormItem, NImage
+  NDivider, NH4, NForm, NFormItem, NImage, useDialog
 } from 'naive-ui'
 import { useImageModelManager } from '../composables/model/useImageModelManager'
 import { useToast } from '../composables/ui/useToast'
-import type { ImageModelConfig } from '@prompt-optimizer/core'
+import { isRunningInElectron, type ImageModelConfig } from '@prompt-optimizer/core'
 import ModelAdvancedSection from './ModelAdvancedSection.vue'
+import ExternalLinkIcon from './icons/ExternalLinkIcon.vue'
 
 
 const { t } = useI18n()
 const toast = useToast()
+const dialog = useDialog()
 
 // Props
 const props = defineProps<{
   show: boolean
   configId?: string
+  initialConfig?: ImageModelConfig
 }>()
 
 // Emits
@@ -270,7 +295,7 @@ const {
   onProviderChange: handleProviderChange,
   onConnectionConfigChange,
   onModelChange,
-  testConnection: handleTestConnection,
+  testConnection: performTestConnection,
   refreshModels: handleRefreshModels,
   updateParamOverrides,
   saveConfig,
@@ -280,6 +305,35 @@ const {
 
 // 计算属性
 const isEditing = computed(() => !!props.configId)
+
+// 获取当前选择的 Provider 的 API Key URL
+const currentProviderApiKeyUrl = computed(() => {
+  return selectedProvider.value?.apiKeyUrl || null
+})
+
+const handleTestConnection = async () => {
+  const runTest = async () => {
+    await performTestConnection()
+  }
+
+  if (!isRunningInElectron()) {
+    if (selectedProvider.value?.corsRestricted) {
+      const providerName = selectedProvider.value.name || selectedProvider.value.id || 'Unknown'
+      dialog.warning({
+        title: t('modelManager.corsRestrictedTag'),
+        content: () => h('div', { style: 'white-space: pre-line;' }, t('modelManager.corsRestrictedConfirm', { provider: providerName })),
+        positiveText: t('common.confirm'),
+        negativeText: t('common.cancel'),
+        // Don't block dialog close while the async test runs.
+        onPositiveClick: () => {
+          void runTest()
+        }
+      })
+      return
+    }
+  }
+  await runTest()
+}
 
 const providerOptions = computed(() =>
   providers.value.map(p => ({
@@ -365,6 +419,39 @@ const canSave = computed(() => {
          isConnectionConfigured.value
 })
 
+const applyDraftConfig = async (draft: ImageModelConfig) => {
+  configForm.value = JSON.parse(JSON.stringify({
+    ...draft,
+    id: '',
+    paramOverrides: draft.paramOverrides || {}
+  })) as ImageModelConfig
+  selectedProviderId.value = draft.providerId
+  selectedModelId.value = draft.modelId
+  await handleProviderChange(draft.providerId, {
+    autoSelectFirstModel: false,
+    resetOverrides: false,
+    resetConnectionConfig: false
+  })
+  await nextTick()
+}
+
+const loadExistingConfig = async (configId: string) => {
+  await loadConfigs()
+  const existing = configs.value.find(c => c.id === configId)
+  if (!existing) return
+
+  configForm.value = JSON.parse(JSON.stringify(existing)) as ImageModelConfig
+  configForm.value.paramOverrides = configForm.value.paramOverrides || {}
+  selectedProviderId.value = existing.providerId
+  selectedModelId.value = existing.modelId
+  await handleProviderChange(existing.providerId, {
+    autoSelectFirstModel: false,
+    resetOverrides: false,
+    resetConnectionConfig: false
+  })
+  await nextTick()
+}
+
 // 方法
 const close = () => {
   emit('update:show', false)
@@ -381,6 +468,9 @@ const resetFormData = () => {
     connectionConfig: {},
     paramOverrides: {}
   }
+  selectedProviderId.value = ''
+  selectedModelId.value = ''
+  models.value = []
   connectionStatus.value = null
   testResult.value = null
   modelLoadingStatus.value = null
@@ -426,7 +516,7 @@ const save = async () => {
     emit('saved')
     close()
   } catch (_error) {
-    console.error('保存配置失败:', error)
+    console.error('保存配置失败:', _error)
     toast.error(t('image.config.saveFailed'))
   }
 }
@@ -434,39 +524,17 @@ const save = async () => {
 // 监听 props 变化
 watch(() => props.show, async (newShow) => {
   if (newShow) {
-    // 打开时准备数据
     try {
-      // 确保提供商数据最新（每次打开都刷新）
       await loadProviders()
-      await loadConfigs()
       if (props.configId) {
-        const existing = configs.value.find(c => c.id === props.configId)
-        if (existing) {
-          // 先填充表单数据，确保 connectionConfig 可用
-          configForm.value = JSON.parse(JSON.stringify(existing)) as ImageModelConfig
-          configForm.value.paramOverrides = configForm.value.paramOverrides || {}
-          selectedProviderId.value = existing.providerId
-          selectedModelId.value = existing.modelId
-          // 然后再调用 handleProviderChange，此时 connectionConfig 已经可用
-          // 编辑模式：不自动选择第一个模型，不重置连接配置，保持已保存的数据
-          await handleProviderChange(existing.providerId, {
-            autoSelectFirstModel: false,
-            resetOverrides: false,
-            resetConnectionConfig: false
-          })
-          // 等待一帧以确保下拉可见
-          await nextTick()
-        }
+        await loadExistingConfig(props.configId)
+      } else if (props.initialConfig) {
+        await applyDraftConfig(props.initialConfig)
       } else {
-        // 新增模式：重置表单数据并自动选择第一个提供商和模型
         resetFormData()
-
-        // 自动选择第一个提供商
         if (providers.value.length > 0) {
           const firstProvider = providers.value[0]
           await handleProviderChange(firstProvider.id)
-
-          // 等待模型加载完成后自动选择第一个模型
           await nextTick()
           if (models.value.length > 0) {
             const firstModel = models.value[0]
@@ -482,30 +550,19 @@ watch(() => props.show, async (newShow) => {
   }
 })
 
-// 单独监听 configId 变化，处理动态更新的情况
-watch(() => props.configId, async (newConfigId) => {
-  // 只有在弹窗已经打开的情况下才处理
-  if (props.show && newConfigId) {
+watch(() => ({
+  configId: props.configId,
+  initialConfig: props.initialConfig
+}), async ({ configId, initialConfig }) => {
+  if (props.show && (configId || initialConfig)) {
     try {
-      await loadConfigs()
-      const existing = configs.value.find(c => c.id === newConfigId)
-      if (existing) {
-        // 先填充表单数据，确保 connectionConfig 可用
-        configForm.value = JSON.parse(JSON.stringify(existing)) as ImageModelConfig
-        configForm.value.paramOverrides = configForm.value.paramOverrides || {}
-        selectedProviderId.value = existing.providerId
-        selectedModelId.value = existing.modelId
-        // 然后再调用 handleProviderChange，此时 connectionConfig 已经可用
-        // 编辑模式：不自动选择第一个模型，不重置连接配置，保持已保存的数据
-        await handleProviderChange(existing.providerId, {
-          autoSelectFirstModel: false,
-          resetOverrides: false,
-          resetConnectionConfig: false
-        })
-        await nextTick()
+      if (configId) {
+        await loadExistingConfig(configId)
+      } else if (initialConfig) {
+        await applyDraftConfig(initialConfig)
       }
     } catch (e) {
-      console.error('处理 configId 变化失败:', e)
+      console.error('处理图像模型弹窗数据变化失败:', e)
     }
   }
 }, { immediate: true })

@@ -28,7 +28,7 @@
             <NText depth="3">{{ error }}</NText>
           </template>
           <template #footer>
-            <NButton @click="handleRetry">{{ t('common.retry') }}</NButton>
+            <NButton :disabled="isActionDisabled" @click="handleRetry">{{ t('common.retry') }}</NButton>
           </template>
         </NResult>
       </template>
@@ -37,6 +37,15 @@
       <template v-else-if="result">
         <NScrollbar style="max-height: calc(100vh - 120px);">
           <NSpace vertical :size="20">
+            <NAlert
+              v-if="stale"
+              type="warning"
+              :bordered="false"
+              class="stale-alert"
+            >
+              {{ staleMessage || t('evaluation.stale.default') }}
+            </NAlert>
+
             <!-- 总分展示 -->
             <div class="score-section">
               <div class="overall-score" :class="scoreLevelClass">
@@ -104,12 +113,33 @@
                 <NListItem v-for="(item, index) in result.improvements" :key="index">
                   <div class="improvement-item">
                     <NText type="info" class="improvement-text">{{ item }}</NText>
-                    <NButton size="tiny" type="primary" ghost @click="handleApplyImprovement(item)">
+                    <NButton size="tiny" type="primary" @click="handleApplyImprovement(item)">
                       {{ t('evaluation.applyToIterate') }}
                     </NButton>
                   </div>
                 </NListItem>
               </NList>
+            </NCard>
+
+            <!-- 反馈输入（可选） -->
+            <NCard
+              v-if="currentType"
+              size="small"
+              class="feedback-section"
+            >
+              <template #header>
+                <NSpace align="center" :size="8">
+                  <span class="feedback-card-title">{{ t('evaluation.feedbackTitle') }}</span>
+                  <NTag size="small" round :bordered="false" type="default" class="optional-tag">
+                    {{ t('evaluation.optional') }}
+                  </NTag>
+                </NSpace>
+              </template>
+              <FeedbackEditor
+                v-model="feedbackDraft"
+                :show-actions="false"
+                :disabled="isActionDisabled"
+              />
             </NCard>
           </NSpace>
         </NScrollbar>
@@ -117,11 +147,35 @@
 
       <!-- 空状态 -->
       <template v-else>
-        <NEmpty :description="t('evaluation.noResult')">
-          <template #icon>
-            <span style="font-size: 48px;">📊</span>
-          </template>
-        </NEmpty>
+        <NSpace vertical :size="12" style="width: 100%;">
+          <NEmpty :description="t('evaluation.noResult')">
+            <template #icon>
+              <NIcon :size="48" :depth="3" aria-hidden="true">
+                <ChartBar />
+              </NIcon>
+            </template>
+          </NEmpty>
+
+          <NCard
+            v-if="currentType"
+            size="small"
+            class="feedback-section"
+          >
+            <template #header>
+              <NSpace align="center" :size="8">
+                <span class="feedback-card-title">{{ t('evaluation.feedbackTitle') }}</span>
+                <NTag size="small" round :bordered="false" type="default" class="optional-tag">
+                  {{ t('evaluation.optional') }}
+                </NTag>
+              </NSpace>
+            </template>
+            <FeedbackEditor
+              v-model="feedbackDraft"
+              :show-actions="false"
+              :disabled="isActionDisabled"
+            />
+          </NCard>
+        </NSpace>
       </template>
 
       <!-- 底部操作栏 -->
@@ -132,10 +186,12 @@
           </NButton>
           <NSpace>
             <NButton
-              v-if="result && !isEvaluating"
+              v-if="currentType"
               type="primary"
-              secondary
-              @click="handleReEvaluate"
+              :disabled="isActionDisabled"
+              :loading="isEvaluating"
+              data-testid="evaluation-panel-re-evaluate"
+              @click="handleReEvaluateClick"
             >
               {{ t('evaluation.reEvaluate') }}
             </NButton>
@@ -159,18 +215,22 @@ import {
   NCard,
   NText,
   NButton,
+  NIcon,
   NProgress,
   NResult,
   NSpin,
   NScrollbar,
   NEmpty,
+  NAlert,
   NList,
   NListItem,
   NTag,
   type ScrollbarInst,
 } from 'naive-ui'
+import { ChartBar } from '@vicons/tabler'
 import type { EvaluationResponse, EvaluationType, PatchOperation } from '@prompt-optimizer/core'
 import InlineDiff from './InlineDiff.vue'
+import FeedbackEditor from './FeedbackEditor.vue'
 
 // Props
 const props = defineProps<{
@@ -181,6 +241,9 @@ const props = defineProps<{
   streamContent: string
   error: string | null
   scoreLevel: 'excellent' | 'good' | 'acceptable' | 'poor' | 'very-poor' | null
+  stale?: boolean
+  staleMessage?: string
+  disableEvaluate?: boolean
 }>()
 
 // Emits
@@ -189,6 +252,7 @@ const emit = defineEmits<{
   (e: 'clear'): void
   (e: 'retry'): void
   (e: 're-evaluate'): void
+  (e: 'evaluate-with-feedback', payload: { feedback: string }): void
   (e: 'apply-local-patch', payload: { operation: PatchOperation }): void
   (e: 'apply-improvement', payload: {
     improvement: string;
@@ -200,6 +264,8 @@ const { t } = useI18n()
 
 // 流式内容滚动条引用
 const streamScrollbarRef = ref<ScrollbarInst | null>(null)
+const feedbackDraft = ref('')
+const isActionDisabled = computed(() => props.isEvaluating || !!props.disableEvaluate)
 
 // 监听流式内容变化，自动滚动到底部
 watch(() => props.streamContent, () => {
@@ -216,10 +282,8 @@ const tOr = (key: string, fallback: string): string => {
 // 面板标题
 const panelTitle = computed(() => {
   switch (props.currentType) {
-    case 'original':
-      return t('evaluation.title.original')
-    case 'optimized':
-      return t('evaluation.title.optimized')
+    case 'result':
+      return t('evaluation.title.result')
     case 'compare':
       return t('evaluation.title.compare')
     case 'prompt-only':
@@ -288,11 +352,22 @@ const handleClear = () => {
 
 // 重试评估
 const handleRetry = () => {
+  if (isActionDisabled.value) return
   emit('retry')
 }
 
 // 重新评估
-const handleReEvaluate = () => {
+const handleReEvaluateClick = () => {
+  if (isActionDisabled.value) return
+
+  const trimmed = feedbackDraft.value.trim()
+
+  if (trimmed) {
+    emit('evaluate-with-feedback', { feedback: trimmed })
+    feedbackDraft.value = ''
+    return
+  }
+
   emit('re-evaluate')
 }
 
@@ -300,7 +375,7 @@ const handleReEvaluate = () => {
 const handleApplyImprovement = (improvement: string) => {
   emit('apply-improvement', {
     improvement,
-    type: props.currentType || 'optimized'
+    type: props.currentType || 'prompt-only'
   })
 }
 
@@ -323,6 +398,12 @@ const getOperationLabel = (op: string): string => {
 const handleApplyPatchLocal = (operation: PatchOperation) => {
   emit('apply-local-patch', { operation })
 }
+
+watch(() => props.show, (visible) => {
+  if (!visible) {
+    feedbackDraft.value = ''
+  }
+})
 </script>
 
 <style scoped>
@@ -475,4 +556,29 @@ const handleApplyPatchLocal = (operation: PatchOperation) => {
 .patch-apply-btn {
   align-self: flex-end;
 }
+
+.feedback-section {
+  margin: 0;
+}
+
+.feedback-section :deep(.n-card__header) {
+  padding: 10px 12px 6px;
+}
+
+.feedback-section :deep(.n-card__content) {
+  padding: 0 12px 12px;
+}
+
+.feedback-card-title {
+  font-weight: 600;
+}
+
+.optional-tag {
+  opacity: 0.85;
+}
+
+.stale-alert {
+  margin-bottom: -4px;
+}
+
 </style>

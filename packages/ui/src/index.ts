@@ -30,6 +30,8 @@ export {
   i18n,
 } from "./plugins/i18n";
 
+export { pinia, installPinia, setPiniaServices } from "./plugins/pinia";
+
 // 导出Naive UI配置
 export {
   currentNaiveTheme as naiveTheme,
@@ -90,6 +92,7 @@ export { default as UpdaterModal } from "./components/UpdaterModal.vue";
 export { default as FullscreenDialog } from "./components/FullscreenDialog.vue";
 export { default as InputWithSelect } from "./components/InputWithSelect.vue";
 export { default as MarkdownRenderer } from "./components/MarkdownRenderer.vue";
+export { default as XmlRenderer } from "./components/XmlRenderer.vue";
 export { default as ToolCallDisplay } from "./components/ToolCallDisplay.vue";
 export { default as FavoriteManagerUI } from "./components/FavoriteManager.vue";
 export { default as CategoryManagerUI } from "./components/CategoryManager.vue";
@@ -102,11 +105,16 @@ export { default as ContextUserTestPanel } from "./components/context-mode/Conte
 export { default as ConversationTestPanel } from "./components/context-mode/ConversationTestPanel.vue";
 export { default as FunctionModelManagerUI } from "./components/FunctionModelManager.vue";
 
-// 基础模式组件
-export { BasicModeWorkspace } from "./components/basic-mode";
+// 基础模式组件已移除静态导出（由 router 动态导入，避免打包进主 bundle）
+// 如需直接使用，请在应用层通过 router 注册或按需动态导入
+// export { default as BasicSystemWorkspace } from "./components/basic-mode/BasicSystemWorkspace.vue";
+// export { default as BasicUserWorkspace } from "./components/basic-mode/BasicUserWorkspace.vue";
 
 // App 布局组件
 export { AppHeaderActions, AppCoreNav, PromptOptimizerApp } from "./components/app-layout";
+
+// Router（由 UI 包提供，应用层应安装此 router 以避免多实例/注入不一致）
+export { router } from "./router";
 
 // 评估组件
 export { EvaluationPanel, EvaluateButton, EvaluationScoreBadge } from "./components/evaluation";
@@ -184,6 +192,10 @@ export {
   // 评估服务
   EvaluationService,
   createEvaluationService,
+  // 🆕 变量提取服务
+  createVariableExtractionService,
+  // 🆕 变量值生成服务
+  createVariableValueGenerationService,
 } from "@prompt-optimizer/core";
 
 // 导出类型
@@ -213,6 +225,11 @@ export type {
   EvaluationResponse,
   EvaluationScore,
   EvaluationStreamHandlers,
+  // 🆕 变量提取服务类型
+  IVariableExtractionService,
+  VariableExtractionRequest,
+  VariableExtractionResponse,
+  ExtractedVariable,
 } from "@prompt-optimizer/core";
 
 // 导出新增的类型和服务
@@ -220,7 +237,6 @@ export * from "./types";
 export * from "./services";
 
 // 导出图像模式组件与核心图像服务（转发 core 能力）
-export { default as ImageWorkspace } from "./components/image-mode/ImageWorkspace.vue";
 export { default as ImageModeSelector } from "./components/image-mode/ImageModeSelector.vue";
 export {
   ImageModelManager,

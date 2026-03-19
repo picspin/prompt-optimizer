@@ -140,6 +140,96 @@ describe('ModelManager', () => {
     });
   });
 
+  describe('provider metadata patching', () => {
+    it('should backfill providerMeta.corsRestricted for stored configs missing it', async () => {
+      const baseAdapter = registry.getAdapter('openai')
+      const baseProvider = baseAdapter.getProvider()
+      const models = baseAdapter.getModels()
+      const mockRegistry = {
+        getAdapter: vi.fn().mockReturnValue({
+          getProvider: () => ({
+            ...baseProvider,
+            id: 'test-provider',
+            name: 'Test Provider',
+            corsRestricted: true
+          })
+        })
+      } as any
+      const localManager = new ModelManager(storageProvider, mockRegistry)
+
+      // Simulate legacy stored providerMeta without the newly added field.
+      // Also tweak the name to ensure we don't overwrite user-customized metadata.
+      const { corsRestricted: _ignored, ...providerWithoutCors } = {
+        ...baseProvider,
+        id: 'test-provider',
+        name: 'Test Provider',
+        corsRestricted: true
+      }
+
+      const legacyConfig: TextModelConfig = {
+        id: 'legacy-test-provider',
+        name: 'Legacy Test Provider',
+        enabled: true,
+        providerMeta: {
+          ...providerWithoutCors,
+          name: 'Legacy Provider Name'
+        },
+        modelMeta: models[0] || baseAdapter.buildDefaultModel('test-model'),
+        connectionConfig: {
+          apiKey: 'test_api_key',
+          baseURL: baseProvider.defaultBaseURL
+        },
+        paramOverrides: {}
+      }
+
+      await localManager.addModel('legacy-test-provider', legacyConfig)
+
+      const reloaded = await localManager.getModel('legacy-test-provider')
+      expect(reloaded?.providerMeta.name).toBe('Legacy Provider Name')
+      expect(reloaded?.providerMeta.corsRestricted).toBe(true)
+    })
+
+    it('should not override providerMeta.corsRestricted when already set', async () => {
+      const baseAdapter = registry.getAdapter('openai')
+      const baseProvider = baseAdapter.getProvider()
+      const models = baseAdapter.getModels()
+      const mockRegistry = {
+        getAdapter: vi.fn().mockReturnValue({
+          getProvider: () => ({
+            ...baseProvider,
+            id: 'test-provider',
+            name: 'Test Provider',
+            corsRestricted: false
+          })
+        })
+      } as any
+      const localManager = new ModelManager(storageProvider, mockRegistry)
+
+      const customConfig: TextModelConfig = {
+        id: 'custom-test-provider',
+        name: 'Custom Test Provider',
+        enabled: true,
+        providerMeta: {
+          ...baseProvider,
+          id: 'test-provider',
+          name: 'Test Provider',
+          corsRestricted: true
+        },
+        modelMeta: models[0] || baseAdapter.buildDefaultModel('test-model'),
+        connectionConfig: {
+          apiKey: 'test_api_key',
+          baseURL: baseProvider.defaultBaseURL
+        },
+        paramOverrides: {}
+      }
+
+      await localManager.addModel('custom-test-provider', customConfig)
+
+      const reloaded = await localManager.getModel('custom-test-provider')
+      expect(reloaded?.providerMeta.corsRestricted).toBe(true)
+    })
+  })
+
   describe('getModel', () => {
     it('should retrieve an existing model by key', async () => {
       const model = createTextModelConfig('MyModel', 'MyModel');

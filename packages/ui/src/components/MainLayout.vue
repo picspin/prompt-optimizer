@@ -67,8 +67,8 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 
 import { useI18n } from 'vue-i18n'
 import { NLayout, NLayoutHeader, NLayoutContent, NFlex, NImage, NText } from 'naive-ui'
-import { ToastUI } from '../index'
-import logoImage from '../assets/logo.jpg'
+import ToastUI from './Toast.vue'
+import logoImage from '../assets/logo.png'
 
 const { t } = useI18n()
 
