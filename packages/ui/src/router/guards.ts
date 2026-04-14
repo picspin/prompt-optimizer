@@ -10,7 +10,7 @@ export const parseSubModeKey = (path: string): SubModeKey | null => {
   const validSubModes = {
     basic: ['system', 'user'] as const,
     pro: ['multi', 'variable'] as const,
-    image: ['text2image', 'image2image'] as const,
+    image: ['text2image', 'image2image', 'multiimage'] as const,
   } as const
 
   type Mode = keyof typeof validSubModes
@@ -39,15 +39,13 @@ export const parseSubModeKey = (path: string): SubModeKey | null => {
  * 2. 重定向非法路由到默认 subMode
  * 3. 兼容旧 pro 路由（/pro/system|/pro/user）
  */
-export const beforeRouteSwitch: NavigationGuard = (to, _from, next) => {
+export const beforeRouteSwitch: NavigationGuard = (to) => {
   // ✅ 兼容旧 pro 路由（/pro/system|/pro/user -> /pro/multi|/pro/variable）
   if (to.path === '/pro/system') {
-    next('/pro/multi')
-    return
+    return '/pro/multi'
   }
   if (to.path === '/pro/user') {
-    next('/pro/variable')
-    return
+    return '/pro/variable'
   }
 
   const subModeKey = parseSubModeKey(to.path)
@@ -66,11 +64,10 @@ export const beforeRouteSwitch: NavigationGuard = (to, _from, next) => {
         defaultSubMode = 'system'
       }
 
-      console.warn(`[Router] 非法 subMode: ${to.path}, 重定向到 /${mode}/${defaultSubMode}`)
-      next(`/${mode}/${defaultSubMode}`)
-      return
+      console.warn(`[Router] Invalid subMode: ${to.path}. Redirecting to /${mode}/${defaultSubMode}`)
+      return `/${mode}/${defaultSubMode}`
     }
   }
 
-  next()
+  return true
 }

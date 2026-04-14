@@ -12,6 +12,13 @@ import { useToast } from '../ui/useToast'
 import { useI18n } from 'vue-i18n'
 import { getI18nErrorMessage } from '../../utils/error'
 import { useFunctionModelManager } from '../model/useFunctionModelManager'
+import {
+  getCompareJudgements,
+  getCompareMode,
+  getCompareSnapshotRoles,
+  getCompareStopSignals,
+  type CompareJudgementRecord,
+} from './compareResultMetadata'
 import type { AppServices } from '../../types/services'
 import type {
   EvaluationType,
@@ -27,6 +34,8 @@ import type {
   EvaluationTestCase,
   EvaluationSnapshot,
   CompareAnalysisHints,
+  CompareStopSignals,
+  StructuredCompareRole,
 } from '@prompt-optimizer/core'
 
 /** 评分等级类型 */
@@ -68,6 +77,7 @@ export interface TypedEvaluationState {
  */
 export interface UseEvaluationOptions {
   evaluationModelKey?: Ref<string> | ComputedRef<string>
+  resolveEvaluationModelKey?: (type: EvaluationType) => string | Promise<string>
   language?: Ref<string> | ComputedRef<string>
   functionMode: Ref<string> | ComputedRef<string>
   subMode: Ref<string> | ComputedRef<string>
@@ -92,6 +102,10 @@ export interface UseEvaluationReturn {
   compareLevel: ComputedRef<ScoreLevel | null>
   isEvaluatingCompare: ComputedRef<boolean>
   hasCompareResult: ComputedRef<boolean>
+  compareMode: ComputedRef<'generic' | 'structured' | null>
+  compareStopSignals: ComputedRef<CompareStopSignals | null>
+  compareSnapshotRoles: ComputedRef<Record<string, StructuredCompareRole> | null>
+  compareJudgements: ComputedRef<CompareJudgementRecord[]>
 
   promptOnlyScore: ComputedRef<number | null>
   promptOnlyLevel: ComputedRef<ScoreLevel | null>
@@ -120,11 +134,13 @@ export interface UseEvaluationReturn {
   evaluatePromptOnly: (params: {
     target: EvaluationTarget
     focus?: string
+    variables?: Record<string, string>
   }) => Promise<void>
   evaluatePromptIterate: (params: {
     target: EvaluationTarget
     iterateRequirement: string
     focus?: string
+    variables?: Record<string, string>
   }) => Promise<void>
 
   clearResult: (type: EvaluationType, variantId?: string) => void
@@ -202,6 +218,18 @@ export function useEvaluation(
   const compareLevel = computed(() => calculateScoreLevel(compareScore.value))
   const isEvaluatingCompare = computed(() => state.compare.isEvaluating)
   const hasCompareResult = computed(() => state.compare.result !== null)
+  const compareMode = computed(
+    () => getCompareMode(state.compare.result)
+  )
+  const compareStopSignals = computed(
+    () => getCompareStopSignals(state.compare.result)
+  )
+  const compareSnapshotRoles = computed(
+    () => getCompareSnapshotRoles(state.compare.result)
+  )
+  const compareJudgements = computed(
+    () => getCompareJudgements(state.compare.result)
+  )
 
   const promptOnlyScore = computed(() => state['prompt-only'].result?.score?.overall ?? null)
   const promptOnlyLevel = computed(() => calculateScoreLevel(promptOnlyScore.value))
@@ -233,7 +261,14 @@ export function useEvaluation(
     calculateScoreLevel(activeTargetState.value?.result?.score?.overall ?? null)
   )
 
-  const getModelKey = async (): Promise<string> => {
+  const getModelKey = async (type: EvaluationType): Promise<string> => {
+    if (options.resolveEvaluationModelKey) {
+      const resolvedModelKey = (await options.resolveEvaluationModelKey(type))?.trim() || ''
+      if (resolvedModelKey) {
+        return resolvedModelKey
+      }
+    }
+
     await functionModelManager.initialize()
     if (functionModelManager.evaluationModel.value) {
       return functionModelManager.evaluationModel.value
@@ -317,7 +352,7 @@ export function useEvaluation(
       target: params.target,
       testCase: params.testCase,
       snapshot: params.snapshot,
-      evaluationModelKey: await getModelKey(),
+      evaluationModelKey: await getModelKey('result'),
       variables: { language: getLanguage() },
       mode: getModeConfig(),
       focus: params.focus?.trim()
@@ -348,7 +383,7 @@ export function useEvaluation(
       testCases: params.testCases,
       snapshots: params.snapshots,
       compareHints: params.compareHints,
-      evaluationModelKey: await getModelKey(),
+      evaluationModelKey: await getModelKey('compare'),
       variables: { language: getLanguage() },
       mode: getModeConfig(),
       focus: params.focus?.trim()
@@ -365,12 +400,16 @@ export function useEvaluation(
   const evaluatePromptOnly = async (params: {
     target: EvaluationTarget
     focus?: string
+    variables?: Record<string, string>
   }): Promise<void> => {
     const request: PromptOnlyEvaluationRequest = {
       type: 'prompt-only',
       target: params.target,
-      evaluationModelKey: await getModelKey(),
-      variables: { language: getLanguage() },
+      evaluationModelKey: await getModelKey('prompt-only'),
+      variables: {
+        ...(params.variables || {}),
+        language: getLanguage(),
+      },
       mode: getModeConfig(),
       focus: params.focus?.trim()
         ? {
@@ -387,13 +426,17 @@ export function useEvaluation(
     target: EvaluationTarget
     iterateRequirement: string
     focus?: string
+    variables?: Record<string, string>
   }): Promise<void> => {
     const request: PromptIterateEvaluationRequest = {
       type: 'prompt-iterate',
       target: params.target,
       iterateRequirement: params.iterateRequirement,
-      evaluationModelKey: await getModelKey(),
-      variables: { language: getLanguage() },
+      evaluationModelKey: await getModelKey('prompt-iterate'),
+      variables: {
+        ...(params.variables || {}),
+        language: getLanguage(),
+      },
       mode: getModeConfig(),
       focus: params.focus?.trim()
         ? {
@@ -457,6 +500,10 @@ export function useEvaluation(
     compareLevel,
     isEvaluatingCompare,
     hasCompareResult,
+    compareMode,
+    compareStopSignals,
+    compareSnapshotRoles,
+    compareJudgements,
     promptOnlyScore,
     promptOnlyLevel,
     isEvaluatingPromptOnly,

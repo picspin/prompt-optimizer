@@ -8,18 +8,29 @@
  */
 
 import { computed, watch, type Ref, type ComputedRef } from 'vue'
-import { useEvaluation, type UseEvaluationReturn, type ScoreLevel } from './useEvaluation'
+import { useI18n } from 'vue-i18n'
+import {
+  useEvaluation,
+  type UseEvaluationOptions,
+  type UseEvaluationReturn,
+  type ScoreLevel,
+} from './useEvaluation'
 import type { CompareEvaluationPayload } from './compareEvaluation'
-import type { AppServices } from '../../types/services'
-import type {
-  EvaluationType,
-  EvaluationResponse,
-  EvaluationContentBlock,
-  EvaluationTarget,
-  EvaluationTestCase,
-  EvaluationSnapshot,
-  ProEvaluationContext,
+import { useToast } from '../ui/useToast'
+import {
+  buildRewritePayload,
+  buildRewritePromptFromEvaluation,
+  normalizeRewriteLocaleLanguage,
+  type EvaluationContentBlock,
+  type EvaluationResponse,
+  type EvaluationSnapshot,
+  type EvaluationSubMode,
+  type EvaluationTarget,
+  type EvaluationTestCase,
+  type EvaluationType,
+  type ProEvaluationContext,
 } from '@prompt-optimizer/core'
+import type { AppServices } from '../../types/services'
 import type { PersistedEvaluationResults } from '../../types/evaluation'
 
 export interface ResultEvaluationTarget {
@@ -33,7 +44,10 @@ export interface UseEvaluationHandlerOptions {
   services: Ref<AppServices | null>
   /** 左侧分析专用：当前工作区提示词 */
   analysisOptimizedPrompt: Ref<string> | ComputedRef<string>
+  analysisVariables?: Ref<Record<string, string>> | ComputedRef<Record<string, string>>
+  analysisTargetResolver?: (defaultTarget: EvaluationTarget) => EvaluationTarget
   evaluationModelKey: Ref<string> | ComputedRef<string>
+  resolveEvaluationModelKey?: UseEvaluationOptions['resolveEvaluationModelKey']
   functionMode: Ref<string> | ComputedRef<string>
   subMode: Ref<string> | ComputedRef<string>
   proContext?: Ref<ProEvaluationContext | undefined> | ComputedRef<ProEvaluationContext | undefined>
@@ -47,6 +61,7 @@ export interface UseEvaluationHandlerOptions {
 
 export interface PromptPanelRef {
   openIterateDialog?: (input?: string) => void
+  runIterateWithInput?: (input: string) => boolean
 }
 
 export interface ResultEvaluationViewProps {
@@ -76,11 +91,17 @@ export interface UseEvaluationHandlerReturn {
   createApplyImprovementHandler: (
     promptPanelRef: Ref<PromptPanelRef | null>
   ) => (payload: { improvement: string; type: EvaluationType }) => void
+  createRewriteFromEvaluationHandler: (
+    promptPanelRef: Ref<PromptPanelRef | null>
+  ) => (payload: { result: EvaluationResponse; type: EvaluationType }) => void
   getResultEvaluationProps: (variantId: string) => ResultEvaluationViewProps
   compareEvaluation: {
     hasCompareResult: ComputedRef<boolean>
     isEvaluatingCompare: ComputedRef<boolean>
     compareScore: ComputedRef<number | null>
+    compareMode: ComputedRef<'generic' | 'structured' | null>
+    compareStopSignals: ComputedRef<NonNullable<EvaluationResponse['metadata']>['compareStopSignals'] | null>
+    compareSnapshotRoles: ComputedRef<NonNullable<EvaluationResponse['metadata']>['snapshotRoles'] | null>
   }
   panelProps: ComputedRef<{
     show: boolean
@@ -91,6 +112,8 @@ export interface UseEvaluationHandlerReturn {
     currentType: EvaluationType | null
     currentVariantId: string | null
     scoreLevel: ScoreLevel | null
+    rewriteRecommendation: 'skip' | 'minor-rewrite' | 'rewrite' | null
+    rewriteReasons: string[]
   }>
 }
 
@@ -108,7 +131,7 @@ const summarizeText = (content: string | undefined, maxLength = 80): string => {
     : normalized
 }
 
-const WORKSPACE_PROMPT_MARKER = '【当前工作区要优化的提示词】'
+const WORKSPACE_PROMPT_MARKER = '[Current workspace prompt under optimization]'
 const ANALYSIS_CONVERSATION_CONTEXT_MAX_LINES = 6
 
 const isProUserEvaluationContext = (
@@ -139,8 +162,8 @@ const toVariableDesignContextBlock = (
   return {
     kind: 'variables',
     label: 'Variable Structure',
-    summary: '这里只说明模板变量结构，不包含任何测试值。',
-    content: `变量: ${variableNames.join(', ')}`,
+    summary: 'This block describes the template variable structure only. It does not include test values.',
+    content: `Variables: ${variableNames.join(', ')}`,
   }
 }
 
@@ -191,8 +214,8 @@ const toConversationDesignContextBlock = (
   })()
 
   const contentLines = [
-    `目标消息角色: ${targetRole}`,
-    '会话上下文:',
+    `Target message role: ${targetRole}`,
+    'Conversation context:',
   ]
 
   if (visibleConversationLines.length) {
@@ -202,7 +225,7 @@ const toConversationDesignContextBlock = (
   return {
     kind: 'conversation',
     label: 'Conversation Design Context',
-    summary: `当前分析目标是 ${targetRole} 消息；会话中的该位置已用“${WORKSPACE_PROMPT_MARKER}”标记。`,
+    summary: `The current analysis target is the ${targetRole} message. This position is marked as "${WORKSPACE_PROMPT_MARKER}" in the conversation.`,
     content: contentLines.join('\n'),
   }
 }
@@ -241,10 +264,18 @@ const toDesignContextBlock = (
 export function useEvaluationHandler(
   options: UseEvaluationHandlerOptions
 ): UseEvaluationHandlerReturn {
+  const { locale, t } = useI18n() as unknown as {
+    locale: Ref<string>
+    t: (key: string) => string
+  }
+  const toast = useToast()
   const {
     services,
     analysisOptimizedPrompt,
+    analysisVariables,
+    analysisTargetResolver,
     evaluationModelKey,
+    resolveEvaluationModelKey,
     functionMode,
     subMode,
     proContext,
@@ -258,6 +289,7 @@ export function useEvaluationHandler(
 
   const evaluation = externalEvaluation ?? useEvaluation(services, {
     evaluationModelKey,
+    resolveEvaluationModelKey,
     functionMode,
     subMode,
   })
@@ -334,23 +366,39 @@ export function useEvaluationHandler(
     }
 
     const analysisOptimized = analysisOptimizedPrompt.value || ''
+    const promptAnalysisVariables = (() => {
+      const rawVariables = analysisVariables?.value
+      if (!rawVariables) return undefined
+
+      const entries = Object.entries(rawVariables).filter(([key, value]) => {
+        if (!key?.trim()) return false
+        if (typeof value !== 'string') return false
+        return value.trim().length > 0
+      })
+
+      return entries.length
+        ? Object.fromEntries(entries)
+        : undefined
+    })()
     const analysisDesignContext = toDesignContextBlock(
       promptAnalysisContext,
       functionMode.value,
       subMode.value,
     )
-    const analysisTarget: EvaluationTarget = {
+    const defaultAnalysisTarget: EvaluationTarget = {
       workspacePrompt: analysisOptimized,
       designContext:
         functionMode.value === 'basic'
           ? undefined
           : analysisDesignContext,
     }
+    const analysisTarget = analysisTargetResolver?.(defaultAnalysisTarget) ?? defaultAnalysisTarget
 
     if (type === 'prompt-only') {
       await evaluation.evaluatePromptOnly({
         target: analysisTarget,
         focus: focus || undefined,
+        variables: promptAnalysisVariables,
       })
       return
     }
@@ -361,6 +409,7 @@ export function useEvaluationHandler(
         await evaluation.evaluatePromptOnly({
           target: analysisTarget,
           focus: focus || undefined,
+          variables: promptAnalysisVariables,
         })
         return
       }
@@ -369,6 +418,7 @@ export function useEvaluationHandler(
         target: analysisTarget,
         iterateRequirement,
         focus: focus || undefined,
+        variables: promptAnalysisVariables,
       })
     }
   }
@@ -420,6 +470,9 @@ export function useEvaluationHandler(
     hasCompareResult: evaluation.hasCompareResult,
     isEvaluatingCompare: evaluation.isEvaluatingCompare,
     compareScore: evaluation.compareScore,
+    compareMode: evaluation.compareMode,
+    compareStopSignals: evaluation.compareStopSignals,
+    compareSnapshotRoles: evaluation.compareSnapshotRoles,
   }
 
   const getIsEvaluatingForActive = (): boolean => {
@@ -433,15 +486,45 @@ export function useEvaluationHandler(
 
   const panelProps = computed(() => {
     const active = evaluation.state.activeDetail
+    const activeResult = evaluation.activeResult.value
+    const rewriteGuidance = (() => {
+      if (!active || !activeResult) return null
+
+      const compareTarget = comparePayload?.value?.target
+      const workspacePrompt =
+        active.type === 'compare'
+          ? compareTarget?.workspacePrompt || analysisOptimizedPrompt.value || ''
+          : analysisOptimizedPrompt.value || ''
+      const referencePrompt =
+        active.type === 'compare'
+          ? compareTarget?.referencePrompt
+          : undefined
+      const language = normalizeRewriteLocaleLanguage(locale.value)
+
+      return buildRewritePayload({
+        result: activeResult,
+        type: active.type,
+        mode: {
+          functionMode: options.functionMode.value as 'basic' | 'pro' | 'image',
+          subMode: options.subMode.value as EvaluationSubMode,
+        },
+        language,
+        workspacePrompt,
+        referencePrompt,
+      }).compressedEvaluation.rewriteGuidance
+    })()
+
     return {
       show: evaluation.isPanelVisible.value,
       isEvaluating: getIsEvaluatingForActive(),
-      result: evaluation.activeResult.value,
+      result: activeResult,
       streamContent: evaluation.activeStreamContent.value,
       error: evaluation.activeError.value,
       currentType: active?.type ?? null,
       currentVariantId: active?.variantId ?? null,
       scoreLevel: evaluation.activeScoreLevel.value,
+      rewriteRecommendation: rewriteGuidance?.recommendation ?? null,
+      rewriteReasons: rewriteGuidance?.reasons || [],
     }
   })
 
@@ -464,6 +547,61 @@ export function useEvaluationHandler(
     }
   }
 
+  const createRewriteFromEvaluationHandler = (
+    promptPanelRef: Ref<PromptPanelRef | null>
+  ) => {
+    return (payload: { result: EvaluationResponse; type: EvaluationType }): void => {
+      if (!payload.result) return
+
+      const compareTarget = comparePayload?.value?.target
+      const workspacePrompt =
+        payload.type === 'compare'
+          ? compareTarget?.workspacePrompt || analysisOptimizedPrompt.value || ''
+          : analysisOptimizedPrompt.value || ''
+      const referencePrompt =
+        payload.type === 'compare'
+          ? compareTarget?.referencePrompt
+          : undefined
+      const language = normalizeRewriteLocaleLanguage(locale.value)
+      const rewritePayload = buildRewritePayload({
+        result: payload.result,
+        type: payload.type,
+        mode: {
+          functionMode: options.functionMode.value as 'basic' | 'pro' | 'image',
+          subMode: options.subMode.value as EvaluationSubMode,
+        },
+        language,
+        workspacePrompt,
+        referencePrompt,
+      })
+
+      if (
+        payload.type === 'compare' &&
+        rewritePayload.compressedEvaluation.rewriteGuidance.recommendation === 'skip'
+      ) {
+        toast.info(t('evaluation.rewriteSkipped'))
+        return
+      }
+
+      const rewriteInput = buildRewritePromptFromEvaluation({
+        result: payload.result,
+        type: payload.type,
+        mode: {
+          functionMode: options.functionMode.value as 'basic' | 'pro' | 'image',
+          subMode: options.subMode.value as EvaluationSubMode,
+        },
+        language,
+        workspacePrompt,
+        referencePrompt,
+      })
+      const started = promptPanelRef.value?.runIterateWithInput?.(rewriteInput) || false
+
+      if (started) {
+        evaluation.closePanel()
+      }
+    }
+  }
+
   return {
     evaluation,
     handleEvaluate,
@@ -472,6 +610,7 @@ export function useEvaluationHandler(
     handleEvaluateActiveWithFeedback,
     clearBeforeTest,
     createApplyImprovementHandler,
+    createRewriteFromEvaluationHandler,
     getResultEvaluationProps,
     compareEvaluation,
     panelProps,

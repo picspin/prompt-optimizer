@@ -9,6 +9,11 @@ import {
   getWorkspace,
 } from '../helpers/analysis'
 import {
+  closeEvaluationDrawer,
+  expectPromptVersionTagVisible,
+  openEvaluationDrawerFromBadge,
+} from '../helpers/evaluation'
+import {
   clickOptimizeButton,
   expectOptimizedResultNotEmpty,
   expectOutputByTestIdNotEmpty,
@@ -39,6 +44,8 @@ import {
  */
 
 const MODE = 'basic-user' as const
+const STALE_COMPARE_MESSAGE =
+  /测试或工作区已变更，建议重新对比。|The test setup or workspace has changed\. Re-run the comparison if needed\./i
 
 test.describe('Basic User - 提示词分析', () => {
   test('分析提示词并显示评估结果', async ({ page }) => {
@@ -58,6 +65,13 @@ test.describe('Basic User - 提示词分析', () => {
     const score = await getEvaluationScore(page, MODE, 'prompt-only')
     expect(score).toBeGreaterThan(0)
     expect(score).toBeLessThanOrEqual(100)
+
+    const workspace = getWorkspace(page, MODE)
+    const analysisBadge = workspace.locator('[data-testid="score-badge-prompt-only"]')
+    const drawer = await openEvaluationDrawerFromBadge(analysisBadge)
+    await expect(drawer.getByTestId('evaluation-panel-rewrite-from-evaluation')).toBeVisible()
+    await expect(drawer.getByTestId('evaluation-panel-rewrite-from-evaluation')).toBeEnabled()
+    await closeEvaluationDrawer(drawer)
   })
 
   test('验证分析按钮在没有提示词时禁用', async ({ page }) => {
@@ -131,8 +145,38 @@ test.describe('Basic User - 提示词分析', () => {
     await expect(compareBadge).toHaveClass(/evaluation-score-badge-btn--stale/)
 
     await compareBadge.click()
-    await expect(
-      page.getByText(/当前测试配置或工作区内容已变更|The test configuration or workspace content has changed/i)
-    ).toBeVisible()
+    await expect(page.locator('.evaluation-hover-card:visible').getByText(STALE_COMPARE_MESSAGE)).toBeVisible()
+  })
+
+  test('点击 V0 后重新分析应回到 prompt-only，而不是沿用旧版本的 iterate 状态', async ({ page }) => {
+    test.setTimeout(360000)
+
+    await navigateToMode(page, 'basic', 'user')
+
+    await fillOriginalPrompt(page, MODE, '请把用户输入改写成更礼貌、更简洁的一句话。')
+    await clickOptimizeButton(page, MODE)
+    await expectOptimizedResultNotEmpty(page, MODE)
+
+    const workspace = getWorkspace(page, MODE)
+    await workspace.getByTestId('prompt-panel-continue-optimize').click()
+    const iterateModal = page.getByTestId('prompt-panel-iterate-modal')
+    await expect(iterateModal).toBeVisible({ timeout: 15000 })
+    await iterateModal.getByTestId('prompt-panel-iterate-input').locator('textarea').fill(
+      '请进一步统一输出口吻，并补充明确的改写边界。'
+    )
+    await iterateModal.getByTestId('prompt-panel-iterate-submit').click()
+
+    await expectPromptVersionTagVisible(page, 2)
+    await expectPromptVersionTagVisible(page, 1)
+    const focusAnalyzeGroup = workspace.locator('.evaluation-entry .focus-analyze-group')
+    await expect(focusAnalyzeGroup).toBeVisible({ timeout: 15000 })
+    await expect(focusAnalyzeGroup).toHaveAttribute('data-evaluation-type', 'prompt-iterate')
+
+    await workspace.locator('[data-testid="prompt-panel-version-tag-v0"]').click()
+    await page.mouse.move(10, 10)
+
+    await expect(focusAnalyzeGroup).toHaveAttribute('data-evaluation-type', 'prompt-only', {
+      timeout: 15000,
+    })
   })
 })

@@ -20,7 +20,10 @@
         :loading="loading"
         :disabled="loading"
         class="evaluation-score-badge-btn"
-        :class="{ 'evaluation-score-badge-btn--stale': stale }"
+        :class="{
+          'evaluation-score-badge-btn--stale': stale,
+          'evaluation-score-badge-btn--interactive': !!result && !loading,
+        }"
         :data-testid="`score-badge-${type}`"
         :data-eval-type="type"
         @click="handleClick"
@@ -45,6 +48,7 @@
         :stale="stale"
         :stale-message="staleMessage"
         :disable-evaluate="disableEvaluate"
+        :disable-evaluate-reason="disableEvaluateReason"
         :visible="popoverVisible"
         @show-detail="handleShowDetail"
         @evaluate="handleEvaluate"
@@ -87,6 +91,8 @@ const props = withDefaults(
     staleMessage?: string
     /** 是否禁止重新评估，但仍允许查看已有结果 */
     disableEvaluate?: boolean
+    /** 不可重新评估时的原因说明 */
+    disableEvaluateReason?: string
   }>(),
   {
     score: null,
@@ -98,6 +104,7 @@ const props = withDefaults(
     stale: false,
     staleMessage: '',
     disableEvaluate: false,
+    disableEvaluateReason: '',
   }
 )
 
@@ -209,6 +216,11 @@ const badgeType = computed(() => {
 // 点击处理 - 显示/隐藏悬浮预览
 const handleClick = () => {
   if (props.loading) return
+
+  if (props.result) {
+    handleShowDetail()
+    return
+  }
 
   if (popoverVisible.value && isPinnedByClick.value) {
     closePopover()
@@ -322,11 +334,34 @@ const handleApplyPatch = (payload: { operation: PatchOperation }) => {
   min-width: 40px;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    filter 0.16s ease;
 }
 
 .evaluation-score-badge-btn--stale {
   opacity: 0.72;
   filter: saturate(0.2);
+}
+
+.evaluation-score-badge-btn--interactive:not(:disabled) {
+  cursor: pointer;
+}
+
+.evaluation-score-badge-btn--interactive:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+}
+
+.evaluation-score-badge-btn--interactive:not(:disabled):active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+}
+
+.evaluation-score-badge-btn--interactive:not(:disabled):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .hover-card-wrapper {

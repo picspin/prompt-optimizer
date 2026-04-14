@@ -12,9 +12,16 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getPiniaServices } from '../../plugins/pinia'
 import { TEMPLATE_SELECTION_KEYS, type ConversationMessage } from '@prompt-optimizer/core'
+import { coerceTestPanelVersionValue } from '../../utils/testPanelVersion'
 import { isValidVariableName, sanitizeVariableRecord } from '../../types/variable'
 import {
+  createDefaultCompareSnapshotRoles,
+  createDefaultCompareSnapshotRoleSignatures,
   createDefaultEvaluationResults,
+  sanitizeCompareSnapshotRoles,
+  sanitizeCompareSnapshotRoleSignatures,
+  type PersistedCompareSnapshotRoles,
+  type PersistedCompareSnapshotRoleSignatures,
   type PersistedEvaluationResults,
 } from '../../types/evaluation'
 
@@ -42,6 +49,8 @@ export interface ProMultiMessageSessionState {
   testVariantResults: TestVariantResults
   testVariantLastRunFingerprint: TestVariantLastRunFingerprint
   evaluationResults: PersistedEvaluationResults
+  compareSnapshotRoles: PersistedCompareSnapshotRoles<TestVariantId>
+  compareSnapshotRoleSignatures: PersistedCompareSnapshotRoleSignatures<TestVariantId>
   selectedOptimizeModelKey: string
   selectedTestModelKey: string
   selectedTemplateId: string | null
@@ -55,8 +64,9 @@ export interface ProMultiMessageSessionState {
  * - 0: v0（原始消息内容）
  * - >=1: v1..vn（历史链版本号）
  * - 'workspace': 下方工作区当前内容（未保存草稿也算）
+ * - 'previous': 动态指向最近保存版本的上一版
  */
-export type TestPanelVersionValue = 'workspace' | 0 | number
+export type TestPanelVersionValue = 'workspace' | 'previous' | 0 | number
 
 export type TestVariantId = 'a' | 'b' | 'c' | 'd'
 
@@ -117,6 +127,8 @@ const createDefaultState = (): ProMultiMessageSessionState => ({
     d: '',
   },
   evaluationResults: createDefaultEvaluationResults(),
+  compareSnapshotRoles: createDefaultCompareSnapshotRoles<TestVariantId>(),
+  compareSnapshotRoleSignatures: createDefaultCompareSnapshotRoleSignatures<TestVariantId>(),
   selectedOptimizeModelKey: '',
   selectedTestModelKey: '',
   selectedTemplateId: null,
@@ -173,6 +185,12 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
 
   // 评估结果
   const evaluationResults = ref<PersistedEvaluationResults>(createDefaultEvaluationResults())
+  const compareSnapshotRoles = ref<PersistedCompareSnapshotRoles<TestVariantId>>(
+    createDefaultCompareSnapshotRoles<TestVariantId>()
+  )
+  const compareSnapshotRoleSignatures = ref<PersistedCompareSnapshotRoleSignatures<TestVariantId>>(
+    createDefaultCompareSnapshotRoleSignatures<TestVariantId>()
+  )
 
   // 模型和模板选择（只存 ID/key）
   const selectedOptimizeModelKey = ref('')
@@ -264,6 +282,7 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
     }
     temporaryVariables.value[name] = value
     lastActiveAt.value = Date.now()
+    void saveSession()
   }
 
   const getTemporaryVariable = (name: string): string | undefined => {
@@ -276,11 +295,13 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
     if (!Object.prototype.hasOwnProperty.call(temporaryVariables.value, name)) return
     delete temporaryVariables.value[name]
     lastActiveAt.value = Date.now()
+    void saveSession()
   }
 
   const clearTemporaryVariables = () => {
     temporaryVariables.value = {}
     lastActiveAt.value = Date.now()
+    void saveSession()
   }
 
   /**
@@ -332,6 +353,16 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
     if (isCompareMode.value === nextValue) return
     isCompareMode.value = nextValue
     lastActiveAt.value = Date.now()
+  }
+
+  const updateCompareSnapshotRoles = (
+    roles: PersistedCompareSnapshotRoles<TestVariantId>,
+    signatures: PersistedCompareSnapshotRoleSignatures<TestVariantId>,
+  ) => {
+    compareSnapshotRoles.value = { ...roles }
+    compareSnapshotRoleSignatures.value = { ...signatures }
+    lastActiveAt.value = Date.now()
+    saveSession()
   }
 
   const setTestColumnCount = (count: TestColumnCount) => {
@@ -387,6 +418,8 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
     testVariantResults.value = defaultState.testVariantResults
     testVariantLastRunFingerprint.value = defaultState.testVariantLastRunFingerprint
     evaluationResults.value = defaultState.evaluationResults
+    compareSnapshotRoles.value = defaultState.compareSnapshotRoles
+    compareSnapshotRoleSignatures.value = defaultState.compareSnapshotRoleSignatures
     selectedOptimizeModelKey.value = defaultState.selectedOptimizeModelKey
     selectedTestModelKey.value = defaultState.selectedTestModelKey
     selectedTemplateId.value = defaultState.selectedTemplateId
@@ -401,7 +434,7 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
   const saveSession = async () => {
     const $services = getPiniaServices()
     if (!$services?.preferenceService) {
-      console.warn('[ProMultiMessageSession] PreferenceService 不可用，无法保存会话')
+      console.warn('[ProMultiMessageSession] PreferenceService is unavailable; cannot save session')
       return
     }
 
@@ -421,6 +454,8 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
         testVariantResults: testVariantResults.value,
         testVariantLastRunFingerprint: testVariantLastRunFingerprint.value,
         evaluationResults: evaluationResults.value,
+        compareSnapshotRoles: compareSnapshotRoles.value,
+        compareSnapshotRoleSignatures: compareSnapshotRoleSignatures.value,
         selectedOptimizeModelKey: selectedOptimizeModelKey.value,
         selectedTestModelKey: selectedTestModelKey.value,
         selectedTemplateId: selectedTemplateId.value,
@@ -433,7 +468,7 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
         sessionState
       )
     } catch (error) {
-      console.error('[ProMultiMessageSession] 保存会话失败:', error)
+      console.error('[ProMultiMessageSession] Failed to save session:', error)
     }
   }
 
@@ -443,7 +478,7 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
   const restoreSession = async () => {
     const $services = getPiniaServices()
     if (!$services?.preferenceService) {
-      console.warn('[ProMultiMessageSession] PreferenceService 不可用，无法恢复会话')
+      console.warn('[ProMultiMessageSession] PreferenceService is unavailable; cannot restore session')
       return
     }
 
@@ -500,10 +535,7 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
           const byId = new Map<TestVariantId, TestVariantConfig>()
 
           const normalizeVersion = (v: unknown): TestPanelVersionValue => {
-            if (v === 0) return 0
-            if (v === 'workspace' || v === 'latest') return 'workspace'
-            if (typeof v === 'number' && Number.isFinite(v) && v >= 1) return v
-            return 'workspace'
+            return coerceTestPanelVersionValue(v) ?? 'workspace'
           }
 
           for (const item of rawVariants) {
@@ -568,6 +600,14 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
             ? (parsed.evaluationResults as PersistedEvaluationResults)
             : {}),
         }
+        compareSnapshotRoles.value = sanitizeCompareSnapshotRoles(
+          (parsed as Partial<ProMultiMessageSessionState>).compareSnapshotRoles,
+          ['a', 'b', 'c', 'd']
+        )
+        compareSnapshotRoleSignatures.value = sanitizeCompareSnapshotRoleSignatures(
+          (parsed as Partial<ProMultiMessageSessionState>).compareSnapshotRoleSignatures,
+          ['a', 'b', 'c', 'd']
+        )
         selectedOptimizeModelKey.value = typeof parsed.selectedOptimizeModelKey === 'string' ? parsed.selectedOptimizeModelKey : ''
         selectedTestModelKey.value = typeof parsed.selectedTestModelKey === 'string' ? parsed.selectedTestModelKey : ''
         selectedTemplateId.value = typeof parsed.selectedTemplateId === 'string' ? parsed.selectedTemplateId : null
@@ -611,7 +651,7 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
         }
       }
     } catch (error) {
-      console.error('[ProMultiMessageSession] 恢复会话失败:', error)
+      console.error('[ProMultiMessageSession] Failed to restore session:', error)
       reset()
     }
   }
@@ -631,6 +671,8 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
     testVariantResults,
     testVariantLastRunFingerprint,
     evaluationResults,
+    compareSnapshotRoles,
+    compareSnapshotRoleSignatures,
     selectedOptimizeModelKey,
     selectedTestModelKey,
     selectedTemplateId,
@@ -655,6 +697,7 @@ export const useProMultiMessageSession = defineStore('proMultiMessageSession', (
     updateTemplate,
     updateIterateTemplate,
     toggleCompareMode,
+    updateCompareSnapshotRoles,
     setTestColumnCount,
     setMainSplitLeftPct,
     resetTestVariantState,

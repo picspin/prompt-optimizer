@@ -27,6 +27,7 @@
                             v-if="versions && versions.length > 0"
                             :size="4"
                             class="version-tags"
+                            data-testid="prompt-panel-version-tags"
                         >
                             <!-- V3, V2, V1... 按降序显示（最新版本在前） -->
                             <NTag
@@ -40,6 +41,7 @@
                                 size="small"
                                 @click="switchVersion(version)"
                                 :bordered="currentVersionId !== version.id || isV0Selected"
+                                :data-testid="`prompt-panel-version-tag-v${version.version}`"
                             >
                                 V{{ version.version }}
                             </NTag>
@@ -51,6 +53,7 @@
                                         size="small"
                                         @click="switchToV0"
                                         :bordered="!isV0Selected"
+                                        data-testid="prompt-panel-version-tag-v0"
                                     >
                                         {{ t("prompt.originalVersion") }}
                                     </NTag>
@@ -151,21 +154,7 @@
                             @evaluate-with-feedback="handleEvaluateWithFeedback"
                         >
                             <template #icon>
-                                <NIcon>
-                                    <svg
-                                        class="w-4 h-4"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            stroke-width="2"
-                                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                                        ></path>
-                                    </svg>
-                                </NIcon>
+                                <AnalyzeActionIcon />
                             </template>
                         </FocusAnalyzeButton>
                     </div>
@@ -188,6 +177,7 @@
                         type="primary"
                         size="small"
                         class="min-w-[100px]"
+                        data-testid="prompt-panel-continue-optimize"
                     >
                         <template #icon>
                             <svg
@@ -241,7 +231,11 @@
         />
     </NFlex>
     <!-- 迭代优化弹窗 -->
-    <Modal v-model="showIterateInput" @confirm="submitIterate">
+    <Modal
+        v-model="showIterateInput"
+        data-testid="prompt-panel-iterate-modal"
+        @confirm="submitIterate"
+    >
         <template #title>
             {{ templateTitleText }}
         </template>
@@ -273,6 +267,7 @@
                     :placeholder="t('prompt.iteratePlaceholder')"
                     :rows="3"
                     :autosize="{ minRows: 3, maxRows: 6 }"
+                    data-testid="prompt-panel-iterate-input"
                 />
             </div>
         </div>
@@ -287,6 +282,7 @@
                 :loading="isIterating"
                 type="primary"
                 size="medium"
+                data-testid="prompt-panel-iterate-submit"
             >
                 {{
                     isIterating
@@ -308,7 +304,7 @@ import { useProContextOptional } from '../composables/prompt/useProContext';
 import TemplateSelect from "./TemplateSelect.vue";
 import Modal from "./Modal.vue";
 import OutputDisplay from "./OutputDisplay.vue";
-import { EvaluationScoreBadge, FocusAnalyzeButton } from "./evaluation";
+import { AnalyzeActionIcon, EvaluationScoreBadge, FocusAnalyzeButton } from "./evaluation";
 import type {
     EvaluationContentBlock,
     EvaluationTarget,
@@ -383,6 +379,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    evaluationTypeOverride: {
+        type: String as () => "prompt-only" | "prompt-iterate" | undefined,
+        default: undefined,
+    },
     showApplyButton: {
         type: Boolean,
         default: false,
@@ -407,6 +407,9 @@ const showEvaluation = computed(() => !!evaluation);
 
 // 判断当前使用的评估类型：有迭代需求用 prompt-iterate，否则用 prompt-only
 const evaluationType = computed<'prompt-only' | 'prompt-iterate'>(() => {
+    if (props.evaluationTypeOverride) {
+        return props.evaluationTypeOverride;
+    }
     const hasIterateNote = currentIterationNote.value.trim().length > 0;
     return hasIterateNote ? 'prompt-iterate' : 'prompt-only';
 });
@@ -601,7 +604,7 @@ const switchToV0 = async () => {
         outputDisplayRef.value.forceRefreshContent();
     }
 
-    console.log("[PromptPanel] 已切换到 V0（原始内容）");
+    console.log('[PromptPanel] Switched to V0 (original content).');
 };
 
 // 处理评估按钮点击（触发评估）
@@ -724,18 +727,26 @@ const cancelIterate = () => {
     iterateInput.value = "";
 };
 
-const submitIterate = () => {
-    if (!iterateInput.value.trim()) return;
+const dispatchIterate = (input: string): boolean => {
+    const trimmedInput = input.trim();
+    if (!trimmedInput || props.isIterating) return false;
+
     if (!props.selectedIterateTemplate) {
         toast.error(t("prompt.error.noTemplate"));
-        return;
+        return false;
     }
 
     emit("iterate", {
         originalPrompt: props.originalPrompt,
         optimizedPrompt: outputDisplayRef.value?.content || props.optimizedPrompt,
-        iterateInput: iterateInput.value.trim(),
+        iterateInput: trimmedInput,
     });
+
+    return true;
+};
+
+const submitIterate = () => {
+    if (!dispatchIterate(iterateInput.value)) return;
 
     // 重置输入
     iterateInput.value = "";
@@ -765,7 +776,7 @@ const switchVersion = async (version: PromptRecord) => {
         outputDisplayRef.value.forceRefreshContent();
     }
 
-    console.log("[PromptPanel] 版本切换完成，强制刷新内容:", {
+    console.log('[PromptPanel] Version switch completed; forcing content refresh:', {
         versionId: version.id,
         version: version.version,
     });
@@ -787,7 +798,7 @@ watch(
             if (outputDisplayRef.value) {
                 outputDisplayRef.value.forceExitEditing();
                 console.log(
-                    "[PromptPanel] 检测到开始优化/迭代，强制退出编辑状态",
+                    '[PromptPanel] Detected optimization/iteration start; forcing the editor to exit editing mode',
                 );
             }
         }
@@ -810,9 +821,19 @@ const openIterateDialog = (input?: string) => {
     showIterateInput.value = true;
 };
 
+const runIterateWithInput = (input: string) => {
+    const started = dispatchIterate(input);
+    if (started) {
+        iterateInput.value = "";
+        showIterateInput.value = false;
+    }
+    return started;
+};
+
 defineExpose({
     refreshIterateTemplateSelect,
     openIterateDialog,
+    runIterateWithInput,
 });
 </script>
 

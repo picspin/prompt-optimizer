@@ -50,10 +50,15 @@ const NButtonStub = defineComponent({
 
 const EvaluationHoverCardStub = defineComponent({
   name: 'EvaluationHoverCard',
-  props: ['result', 'type', 'loading', 'visible', 'disableEvaluate'],
+  props: ['result', 'type', 'loading', 'visible', 'disableEvaluate', 'disableEvaluateReason'],
   emits: ['show-detail', 'evaluate', 'evaluate-with-feedback', 'apply-improvement', 'apply-patch'],
-  setup() {
-    return () => h('div', { class: 'hover-card-stub' }, [h('textarea', { 'data-testid': 'feedback-input' })])
+  setup(props) {
+    return () => h('div', { class: 'hover-card-stub' }, [
+      props.disableEvaluateReason
+        ? h('div', { 'data-testid': 'disable-evaluate-reason' }, String(props.disableEvaluateReason))
+        : null,
+      h('textarea', { 'data-testid': 'feedback-input' }),
+    ])
   },
 })
 
@@ -77,6 +82,32 @@ const baseResult = {
 describe('EvaluationScoreBadge popover focus interaction', () => {
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it('clicking the score badge should open detail directly when a result exists', async () => {
+    const wrapper = mount(EvaluationScoreBadge, {
+      props: {
+        score: 88,
+        level: 'good',
+        loading: false,
+        result: baseResult,
+        type: 'result',
+      },
+      global: {
+        stubs: {
+          NPopover: NPopoverStub,
+          NButton: NButtonStub,
+          EvaluationHoverCard: EvaluationHoverCardStub,
+        },
+      },
+    })
+
+    const badgeButton = wrapper.find('[data-testid="score-badge-result"]')
+    await badgeButton.trigger('click')
+    await nextTick()
+
+    expect(wrapper.emitted('show-detail')).toEqual([[]])
+    expect(wrapper.find('.hover-card-wrapper').exists()).toBe(false)
   })
 
   it('focus within popover should prevent hover auto-close while typing', async () => {
@@ -213,7 +244,7 @@ describe('EvaluationScoreBadge popover focus interaction', () => {
     })
 
     const badgeButton = wrapper.find('[data-testid="score-badge-result"]')
-    await badgeButton.trigger('click')
+    await badgeButton.trigger('mouseenter')
     await nextTick()
 
     const hoverCard = wrapper.findComponent({ name: 'EvaluationHoverCard' })
@@ -223,5 +254,34 @@ describe('EvaluationScoreBadge popover focus interaction', () => {
 
     expect(wrapper.emitted('evaluate')).toBeFalsy()
     expect(wrapper.emitted('evaluate-with-feedback')).toBeFalsy()
+  })
+
+  it('passes disableEvaluateReason into the hover card when evaluation is blocked', async () => {
+    const wrapper = mount(EvaluationScoreBadge, {
+      props: {
+        score: 80,
+        level: 'good',
+        loading: false,
+        result: baseResult,
+        type: 'compare',
+        disableEvaluate: true,
+        disableEvaluateReason: '对比评估至少需要一个工作区测试结果。',
+      },
+      global: {
+        stubs: {
+          NPopover: NPopoverStub,
+          NButton: NButtonStub,
+          EvaluationHoverCard: EvaluationHoverCardStub,
+        },
+      },
+    })
+
+    const badgeButton = wrapper.find('[data-testid="score-badge-compare"]')
+    await badgeButton.trigger('mouseenter')
+    await nextTick()
+
+    expect(wrapper.get('[data-testid="disable-evaluate-reason"]').text()).toBe(
+      '对比评估至少需要一个工作区测试结果。'
+    )
   })
 })

@@ -134,14 +134,14 @@
                   </n-upload-dragger>
                 </n-upload>
 
-                <n-image-group v-if="mediaDraft.sources.length > 0">
+                <AppPreviewImageGroup v-if="mediaDraft.sources.length > 0">
                   <n-space :size="8" wrap>
                     <div
                       v-for="(source, index) in mediaDraft.sources"
                       :key="`${index}-${source.slice(0, 32)}`"
                       style="display: flex; flex-direction: column; gap: 6px;"
                     >
-                      <n-image
+                      <AppPreviewImage
                         :src="source"
                         width="88"
                         object-fit="cover"
@@ -175,7 +175,7 @@
                       </n-space>
                     </div>
                   </n-space>
-                </n-image-group>
+                </AppPreviewImageGroup>
 
                 <n-button
                   v-if="mediaDraft.sources.length > 0"
@@ -241,13 +241,13 @@ import {
   NGridItem,
   NUpload,
   NUploadDragger,
-  NImage,
-  NImageGroup,
   type UploadFileInfo,
 } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../composables/ui/useToast';
 import { useTagSuggestions } from '../composables/ui/useTagSuggestions';
+import AppPreviewImage from './media/AppPreviewImage.vue';
+import AppPreviewImageGroup from './media/AppPreviewImageGroup.vue';
 import OutputDisplayCore from './OutputDisplayCore.vue';
 import CategoryTreeSelect from './CategoryTreeSelect.vue';
 import type { AppServices } from '../types/services';
@@ -257,6 +257,7 @@ import {
   persistImageSourceAsAssetId,
   resolveAssetIdToDataUrl,
 } from '../utils/image-asset-storage';
+import { getI18nErrorMessage } from '../utils/error';
 
 const { t } = useI18n();
 const { filterTags, loadTags } = useTagSuggestions();
@@ -282,7 +283,7 @@ interface Props {
     tags?: string[]
     functionMode?: 'basic' | 'context' | 'image'
     optimizationMode?: 'system' | 'user'
-    imageSubMode?: 'text2image' | 'image2image'
+    imageSubMode?: 'text2image' | 'image2image' | 'multiimage'
     metadata?: Record<string, unknown>
   }
   /** 要编辑的收藏(仅用于 edit 模式) */
@@ -336,7 +337,7 @@ const formData = reactive({
   tags: [] as string[],
   functionMode: 'basic' as 'basic' | 'context' | 'image',
   optimizationMode: 'system' as 'system' | 'user' | undefined,
-  imageSubMode: undefined as 'text2image' | 'image2image' | undefined
+  imageSubMode: undefined as 'text2image' | 'image2image' | 'multiimage' | undefined
 });
 
 const mediaDraft = reactive({
@@ -608,7 +609,8 @@ const optimizationModeOptions = computed(() => {
 
 const imageSubModeOptions = computed(() => [
   { label: t('favorites.dialog.imageModes.text2image'), value: 'text2image' },
-  { label: t('favorites.dialog.imageModes.image2image'), value: 'image2image' }
+  { label: t('favorites.dialog.imageModes.image2image'), value: 'image2image' },
+  { label: t('imageMode.multiimage'), value: 'multiimage' }
 ]);
 
 // 功能模式切换处理
@@ -689,7 +691,7 @@ const handleSave = async () => {
       } catch (error) {
         // 只忽略"标签已存在"错误，其他错误需要抛出
         if (error && typeof error === 'object' && 'code' in error && error.code !== 'TAG_ALREADY_EXISTS') {
-          console.error('添加标签到独立库失败:', error);
+          console.error('Failed to add tag to the dedicated library:', error);
           throw error;
         }
         // 标签已存在，这是正常情况，继续处理
@@ -758,7 +760,7 @@ const handleSave = async () => {
         tags: string[];
         functionMode: 'basic' | 'context' | 'image';
         optimizationMode?: 'system' | 'user';
-        imageSubMode?: 'text2image' | 'image2image';
+        imageSubMode?: 'text2image' | 'image2image' | 'multiimage';
         metadata?: Record<string, unknown>;
       } = {
         ...basePayload
@@ -774,7 +776,7 @@ const handleSave = async () => {
     emit('update:show', false);
   } catch (error) {
     const failedKey = props.mode === 'edit' ? 'favorites.dialog.messages.editFailed' : 'favorites.dialog.messages.saveFailed';
-    const errorMessage = error instanceof Error ? error.message : '未知错误';
+    const errorMessage = getI18nErrorMessage(error, t('common.error'));
     message.error(`${t(failedKey)}: ${errorMessage}`);
   } finally {
     saving.value = false;
@@ -840,7 +842,11 @@ watch(() => props.show, async (newShow) => {
       if (prefill?.functionMode === 'image') {
         formData.functionMode = 'image';
         formData.imageSubMode =
-          prefill.imageSubMode === 'image2image' ? 'image2image' : 'text2image';
+          prefill.imageSubMode === 'image2image'
+            ? 'image2image'
+            : prefill.imageSubMode === 'multiimage'
+              ? 'multiimage'
+              : 'text2image';
         formData.optimizationMode = undefined;
       } else if (prefill?.functionMode === 'context' || prefill?.functionMode === 'basic') {
         formData.functionMode = prefill.functionMode;

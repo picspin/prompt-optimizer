@@ -10,6 +10,11 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getPiniaServices } from '../../plugins/pinia'
 import { isValidVariableName, sanitizeVariableRecord } from '../../types/variable'
+import { coerceTestPanelVersionValue } from '../../utils/testPanelVersion'
+import {
+  normalizeImageSourceToPayload,
+  persistImagePayloadAsAssetId,
+} from '../../utils/image-asset-storage'
 import {
   isImageRef,
   createImageRef,
@@ -34,8 +39,9 @@ type ImageResultItem = ImageResult['images'][number]
  * - 0: v0（原始提示词）
  * - >=1: v1..vn（历史链版本号）
  * - 'workspace': 下方工作区当前内容（未保存草稿也算）
+ * - 'previous': 动态指向最近保存版本的上一版
  */
-export type TestPanelVersionValue = 'workspace' | 0 | number
+export type TestPanelVersionValue = 'workspace' | 'previous' | 0 | number
 
 export type TestVariantId = 'a' | 'b' | 'c' | 'd'
 
@@ -219,7 +225,7 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     layout.value = { ...layout.value, testColumnCount: count }
     lastActiveAt.value = Date.now()
     saveSession().catch(error => {
-      console.error('[ImageText2ImageSession] 自动保存会话失败:', error)
+      console.error('[ImageText2ImageSession] Failed to auto-save session:', error)
     })
   }
 
@@ -230,7 +236,7 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     layout.value = { ...layout.value, mainSplitLeftPct: next }
     lastActiveAt.value = Date.now()
     saveSession().catch(error => {
-      console.error('[ImageText2ImageSession] 自动保存会话失败:', error)
+      console.error('[ImageText2ImageSession] Failed to auto-save session:', error)
     })
   }
 
@@ -245,7 +251,7 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     testVariants.value = nextList
     lastActiveAt.value = Date.now()
     saveSession().catch(error => {
-      console.error('[ImageText2ImageSession] 自动保存会话失败:', error)
+      console.error('[ImageText2ImageSession] Failed to auto-save session:', error)
     })
   }
 
@@ -268,7 +274,7 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     selectedTextModelKey.value = modelKey
     lastActiveAt.value = Date.now()
     saveSession().catch(error => {
-      console.error('[ImageText2ImageSession] 自动保存会话失败:', error)
+      console.error('[ImageText2ImageSession] Failed to auto-save session:', error)
     })
   }
 
@@ -278,7 +284,7 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     lastActiveAt.value = Date.now()
     // 异步保存完整状态（best-effort）
     saveSession().catch(error => {
-      console.error('[ImageText2ImageSession] 自动保存会话失败:', error)
+      console.error('[ImageText2ImageSession] Failed to auto-save session:', error)
     })
   }
 
@@ -287,7 +293,7 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     selectedTemplateId.value = templateId
     lastActiveAt.value = Date.now()
     saveSession().catch(error => {
-      console.error('[ImageText2ImageSession] 自动保存会话失败:', error)
+      console.error('[ImageText2ImageSession] Failed to auto-save session:', error)
     })
   }
 
@@ -296,7 +302,7 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     selectedIterateTemplateId.value = templateId
     lastActiveAt.value = Date.now()
     saveSession().catch(error => {
-      console.error('[ImageText2ImageSession] 自动保存会话失败:', error)
+      console.error('[ImageText2ImageSession] Failed to auto-save session:', error)
     })
   }
 
@@ -315,6 +321,9 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     }
     temporaryVariables.value[name] = value
     lastActiveAt.value = Date.now()
+    saveSession().catch(error => {
+      console.error('[ImageText2ImageSession] Failed to auto-save temporary variables:', error)
+    })
   }
 
   const getTemporaryVariable = (name: string): string | undefined => {
@@ -327,11 +336,17 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     if (!Object.prototype.hasOwnProperty.call(temporaryVariables.value, name)) return
     delete temporaryVariables.value[name]
     lastActiveAt.value = Date.now()
+    saveSession().catch(error => {
+      console.error('[ImageText2ImageSession] Failed to auto-save temporary variables:', error)
+    })
   }
 
   const clearTemporaryVariables = () => {
     temporaryVariables.value = {}
     lastActiveAt.value = Date.now()
+    saveSession().catch(error => {
+      console.error('[ImageText2ImageSession] Failed to auto-save temporary variables:', error)
+    })
   }
 
   const reset = () => {
@@ -378,37 +393,37 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
         continue
       }
 
-      // 如果有 base64 数据，保存到存储服务并创建引用
-      if (img.b64) {
-        const mimeType = img.mimeType || 'image/png'
-        const imageId = await computeStableImageId(img.b64, mimeType)
+      const payload = img.b64
+        ? {
+            b64: img.b64,
+            mimeType: img.mimeType || 'image/png',
+          }
+        : img.url
+          ? await normalizeImageSourceToPayload(img.url)
+          : null
 
-        // Dedup: do not rewrite existing records.
-        const existing = await storageService.getMetadata(imageId)
-        if (!existing) {
-          await storageService.saveImage({
-            metadata: {
-              id: imageId,
-              mimeType,
-              sizeBytes: Math.floor(img.b64.length * 0.75),
-              createdAt: Date.now(),
-              accessedAt: Date.now(),
-              source: 'generated',
-              metadata: {
-                prompt: result.metadata?.prompt,
-                modelId: result.metadata?.modelId,
-                configId: result.metadata?.configId
-              }
-            },
-            data: img.b64
-          })
-        }
-
-        processedImages.push(createImageRef(imageId))
-      } else {
-        // URL 或其他格式，直接保留
+      if (!payload) {
         processedImages.push(img)
+        continue
       }
+
+      const imageId = await persistImagePayloadAsAssetId({
+        payload,
+        storageService,
+        sourceType: 'generated',
+        metadata: {
+          prompt: result.metadata?.prompt,
+          modelId: result.metadata?.modelId,
+          configId: result.metadata?.configId,
+        },
+      })
+
+      if (imageId) {
+        processedImages.push(createImageRef(imageId))
+        continue
+      }
+
+      processedImages.push(img)
     }
 
     return {
@@ -441,16 +456,46 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
               mimeType: fullImageData.metadata.mimeType
             })
           } else {
-            console.warn(`[ImageText2ImageSession] 图像 ${img.id} 未找到`)
+            console.warn(`[ImageText2ImageSession] Image ${img.id} was not found`)
             // 图像未找到，保留引用（UI 会显示错误）
             loadedImages.push(img)
           }
         } catch (error) {
-          console.error(`[ImageText2ImageSession] 加载图像 ${img.id} 失败:`, error)
+          console.error(`[ImageText2ImageSession] Failed to load image ${img.id}:`, error)
           // 加载失败，保留引用
           loadedImages.push(img)
         }
       } else {
+        if (img.url && !img.b64) {
+          try {
+            const payload = await normalizeImageSourceToPayload(img.url)
+            if (payload?.b64) {
+              try {
+                await persistImagePayloadAsAssetId({
+                  payload,
+                  storageService,
+                  sourceType: 'generated',
+                  metadata: {
+                    prompt: result.metadata?.prompt,
+                    modelId: result.metadata?.modelId,
+                    configId: result.metadata?.configId,
+                  },
+                })
+              } catch (error) {
+                console.warn('[ImageText2ImageSession] Failed to persist legacy URL image during restore:', error)
+              }
+
+              loadedImages.push({
+                b64: payload.b64,
+                mimeType: payload.mimeType,
+              })
+              continue
+            }
+          } catch (error) {
+            console.warn('[ImageText2ImageSession] Failed to restore legacy URL image:', error)
+          }
+        }
+
         // 非引用格式（URL 或 base64），直接保留
         loadedImages.push(img)
       }
@@ -466,10 +511,10 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
     return await queueImageStorageMaintenance(async () => {
       const $services = getPiniaServices()
       if (!$services?.preferenceService) {
-        throw new Error('[ImageText2ImageSession] PreferenceService 不可用，无法保存会话')
+        throw new Error('[ImageText2ImageSession] PreferenceService is unavailable; cannot save session')
       }
       if (!$services?.imageStorageService) {
-        throw new Error('[ImageText2ImageSession] ImageStorageService 不可用，无法保存会话')
+        throw new Error('[ImageText2ImageSession] ImageStorageService is unavailable; cannot save session')
       }
 
       // v2: 多列测试结果（最多 4 列）
@@ -523,10 +568,10 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
   const restoreSession = async () => {
     const $services = getPiniaServices()
     if (!$services?.preferenceService) {
-      throw new Error('[ImageText2ImageSession] PreferenceService 不可用，无法恢复会话')
+      throw new Error('[ImageText2ImageSession] PreferenceService is unavailable; cannot restore session')
     }
     if (!$services?.imageStorageService) {
-      throw new Error('[ImageText2ImageSession] ImageStorageService 不可用，无法恢复会话')
+      throw new Error('[ImageText2ImageSession] ImageStorageService is unavailable; cannot restore session')
     }
 
     try {
@@ -568,10 +613,7 @@ export const useImageText2ImageSession = defineStore('imageText2ImageSession', (
           const byId = new Map<TestVariantId, TestVariantConfig>()
 
           const normalizeVersion = (v: unknown): TestPanelVersionValue => {
-            if (v === 0) return 0
-            if (v === 'workspace' || v === 'latest') return 'workspace'
-            if (typeof v === 'number' && Number.isFinite(v) && v >= 1) return v
-            return 'workspace'
+            return coerceTestPanelVersionValue(v) ?? 'workspace'
           }
 
           for (const item of rawVariants) {

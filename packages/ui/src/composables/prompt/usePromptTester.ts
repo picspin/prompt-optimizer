@@ -7,6 +7,7 @@ import type { OptimizationMode } from '@prompt-optimizer/core'
 import type { AppServices } from '../../types/services'
 import type { ConversationMessage } from '../../types/variable'
 import type { VariableManagerHooks } from './useVariableManager'
+import { runTasksWithExecutionMode } from '../../utils/runTasksSequentially'
 import {
   COMPARE_BASELINE_VARIANT_ID,
   COMPARE_CANDIDATE_VARIANT_ID,
@@ -72,23 +73,19 @@ export function usePromptTester(
       }
 
       if (isCompareMode) {
-        // 对比模式：并发测试原始和优化提示词
-        await Promise.all([
-          state.testPromptWithType(
-            COMPARE_BASELINE_VARIANT_ID,
-            prompt,
-            optimizedPrompt,
-            testContent,
-            testVariables
-          ),
-          state.testPromptWithType(
-            COMPARE_CANDIDATE_VARIANT_ID,
-            prompt,
-            optimizedPrompt,
-            testContent,
-            testVariables
-          )
-        ])
+        // 产品默认并行；自动化环境回退串行，避免录制/回放把结果落到错误列。
+        await runTasksWithExecutionMode(
+          [COMPARE_BASELINE_VARIANT_ID, COMPARE_CANDIDATE_VARIANT_ID] as const,
+          async (variantId) => {
+            await state.testPromptWithType(
+              variantId,
+              prompt,
+              optimizedPrompt,
+              testContent,
+              testVariables
+            )
+          }
+        )
       } else {
         // 单一模式：只测试优化后的提示词
         await state.testPromptWithType(
@@ -158,7 +155,8 @@ export function usePromptTester(
         } else {
           // 系统提示词模式：提示词作为系统消息
           systemPrompt = selectedPrompt
-          userPrompt = testContent || '请按照你的角色设定，展示你的能力并与我互动。'
+          userPrompt =
+            testContent || 'Please follow your role instructions and show your capabilities in the conversation.'
         }
 
         // 变量：合并全局变量 + 测试变量

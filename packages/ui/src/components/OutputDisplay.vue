@@ -111,18 +111,18 @@ const testId = computed(() => props.testId || undefined)
 // 注入服务并获取 CompareService
 const services = inject<Ref<AppServices | null>>('services');
 if (!services) {
-  throw new Error('[OutputDisplay] services未正确注入，请确保在App组件中正确provide了services');
+  throw new Error('[OutputDisplay] Services were not injected correctly. Make sure App provides the services instance.');
 }
 
 const compareService = computed(() => {
   const servicesValue = services.value;
   if (!servicesValue) {
-    throw new Error('[OutputDisplay] services未初始化，请确保应用已正确启动');
+    throw new Error('[OutputDisplay] Services are not initialized. Make sure the application has started correctly.');
   }
 
   const service = servicesValue.compareService;
   if (!service) {
-    throw new Error('[OutputDisplay] compareService未初始化，请确保服务已正确配置');
+    throw new Error('[OutputDisplay] CompareService is not initialized. Make sure the service is configured correctly.');
   }
 
   return service;
@@ -166,6 +166,8 @@ defineExpose({ forceRefreshContent, forceExitEditing });
 </script>
 
 <style scoped>
+@reference "../styles/index.css";
+
 .output-display {
   @apply flex flex-col h-full border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 relative;
 }
@@ -195,7 +197,7 @@ defineExpose({ forceRefreshContent, forceExitEditing });
 .toolbar-btn {
   @apply flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors;
   @apply hover:bg-gray-100 dark:hover:bg-gray-700;
-  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50;
+  @apply focus:outline-hidden focus:ring-2 focus:ring-blue-500/50;
 }
 
 /* 悬浮工具栏动画 */

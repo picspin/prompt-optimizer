@@ -16,6 +16,7 @@ export interface TemplateMetadata {
     | 'userOptimize'
     | 'text2imageOptimize'
     | 'image2imageOptimize'
+    | 'multiimageOptimize'
     | 'imageIterate'
     | 'iterate'
     | 'conversationMessageOptimize'
@@ -24,7 +25,9 @@ export interface TemplateMetadata {
     | 'contextSystemOptimize'
     | 'evaluation'
     | 'variable-extraction'
-    | 'variable-value-generation'; // 模板类型标识（包含向后兼容的旧值）
+    | 'variable-value-generation'
+    | 'image-prompt-composition'
+    | 'image-prompt-migration'; // 模板类型标识
   language?: 'zh' | 'en';   // 模板语言（可选，主要用于内置模板语言切换）
   [key: string]: any;       // 允许任意额外字段
 }
@@ -143,6 +146,7 @@ export const templateSchema = z.object({
       'userOptimize',
       'text2imageOptimize',
       'image2imageOptimize',
+      'multiimageOptimize',
       'imageIterate',
       'iterate',
       'conversationMessageOptimize',
@@ -152,7 +156,9 @@ export const templateSchema = z.object({
       'evaluation',
       'variable-extraction',
       'variable-value-generation',
-    ]),  // 🔧 向后兼容：保留旧枚举值
+      'image-prompt-composition',
+      'image-prompt-migration',
+    ]),
     language: z.enum(['zh', 'en']).optional()
   }).passthrough(), // 允许额外字段通过验证
   isBuiltin: z.boolean().optional()

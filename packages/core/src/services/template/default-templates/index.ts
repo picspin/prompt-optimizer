@@ -58,6 +58,9 @@ import { template as image2image_design_text_edit_optimize } from './image-optim
 import { template as image2image_design_text_edit_optimize_en } from './image-optimize/image2image/design-text-edit-optimize_en';
 import { template as image2image_json_structured_optimize } from './image-optimize/image2image/json-structured-optimize';
 import { template as image2image_json_structured_optimize_en } from './image-optimize/image2image/json-structured-optimize_en';
+// 多图生图
+import { template as multiimage_optimize } from './image-optimize/multiimage/multiimage-optimize';
+import { template as multiimage_optimize_en } from './image-optimize/multiimage/multiimage-optimize_en';
 // 图像迭代
 import { template as image_iterate_general } from './image-optimize/iterate/image-iterate-general';
 import { template as image_iterate_general_en } from './image-optimize/iterate/image-iterate-general_en';
@@ -102,6 +105,12 @@ import { template as evaluation_pro_user_prompt_iterate_en } from './evaluation/
 // 评估模板 - 图像模式/文生图
 import { template as evaluation_image_text2image_prompt_only } from './evaluation/image/text2image/evaluation-prompt-only';
 import { template as evaluation_image_text2image_prompt_only_en } from './evaluation/image/text2image/evaluation-prompt-only_en';
+import { template as evaluation_image_text2image_prompt_iterate } from './evaluation/image/text2image/evaluation-prompt-iterate';
+import { template as evaluation_image_text2image_prompt_iterate_en } from './evaluation/image/text2image/evaluation-prompt-iterate_en';
+import { template as evaluation_image_text2image_result } from './evaluation/image/text2image/evaluation-result';
+import { template as evaluation_image_text2image_result_en } from './evaluation/image/text2image/evaluation-result_en';
+import { template as evaluation_image_text2image_compare } from './evaluation/image/text2image/evaluation-compare';
+import { template as evaluation_image_text2image_compare_en } from './evaluation/image/text2image/evaluation-compare_en';
 // 评估模板 - 图像模式/图生图
 import { template as evaluation_image_image2image_prompt_only } from './evaluation/image/image2image/evaluation-prompt-only';
 import { template as evaluation_image_image2image_prompt_only_en } from './evaluation/image/image2image/evaluation-prompt-only_en';
@@ -113,6 +122,26 @@ import { variableExtractionTemplateEn } from './variable-extraction';
 // 变量值生成模板
 import { variableValueGenerationTemplate } from './variable-value-generation';
 import { variableValueGenerationTemplateEn } from './variable-value-generation';
+// 基于评估结果的智能改写模板
+import { template as evaluation_rewrite_basic_system } from './evaluation-rewrite/basic-system';
+import { template as evaluation_rewrite_basic_system_en } from './evaluation-rewrite/basic-system_en';
+import { template as evaluation_rewrite_basic_user } from './evaluation-rewrite/basic-user';
+import { template as evaluation_rewrite_basic_user_en } from './evaluation-rewrite/basic-user_en';
+import { template as evaluation_rewrite_pro_multi } from './evaluation-rewrite/pro-multi';
+import { template as evaluation_rewrite_pro_multi_en } from './evaluation-rewrite/pro-multi_en';
+import { template as evaluation_rewrite_pro_variable } from './evaluation-rewrite/pro-variable';
+import { template as evaluation_rewrite_pro_variable_en } from './evaluation-rewrite/pro-variable_en';
+import { template as evaluation_rewrite_generic } from './evaluation-rewrite/generic';
+import { template as evaluation_rewrite_generic_en } from './evaluation-rewrite/generic_en';
+import { template as evaluation_structured_compare_pair_judge } from './evaluation-structured-compare/pair-judge';
+import { template as evaluation_structured_compare_pair_judge_en } from './evaluation-structured-compare/pair-judge_en';
+import { template as evaluation_structured_compare_synthesis } from './evaluation-structured-compare/synthesis';
+import { template as evaluation_structured_compare_synthesis_en } from './evaluation-structured-compare/synthesis_en';
+
+import { imagePromptCompositionTemplate } from './image-prompt-composition';
+import { imagePromptCompositionTemplateEn } from './image-prompt-composition';
+import { imagePromptMigrationTemplate } from './image-prompt-migration';
+import { imagePromptMigrationTemplateEn } from './image-prompt-migration';
 
 // 简单的模板集合 - 模板自身已包含完整信息（id、name、language、type等）
 export const ALL_TEMPLATES = {
@@ -162,6 +191,8 @@ export const ALL_TEMPLATES = {
   image2image_design_text_edit_optimize_en,
   image2image_json_structured_optimize,
   image2image_json_structured_optimize_en,
+  multiimage_optimize,
+  multiimage_optimize_en,
   // 图像迭代模板
   image_iterate_general,
   image_iterate_general_en,
@@ -205,6 +236,12 @@ export const ALL_TEMPLATES = {
   // 评估模板 - 图像模式/文生图
   evaluation_image_text2image_prompt_only,
   evaluation_image_text2image_prompt_only_en,
+  evaluation_image_text2image_prompt_iterate,
+  evaluation_image_text2image_prompt_iterate_en,
+  evaluation_image_text2image_result,
+  evaluation_image_text2image_result_en,
+  evaluation_image_text2image_compare,
+  evaluation_image_text2image_compare_en,
   // 评估模板 - 图像模式/图生图
   evaluation_image_image2image_prompt_only,
   evaluation_image_image2image_prompt_only_en,
@@ -214,4 +251,24 @@ export const ALL_TEMPLATES = {
   // 变量值生成模板
   variableValueGenerationTemplate,
   variableValueGenerationTemplateEn,
+  // 基于评估结果的智能改写模板
+  evaluation_rewrite_basic_system,
+  evaluation_rewrite_basic_system_en,
+  evaluation_rewrite_basic_user,
+  evaluation_rewrite_basic_user_en,
+  evaluation_rewrite_pro_multi,
+  evaluation_rewrite_pro_multi_en,
+  evaluation_rewrite_pro_variable,
+  evaluation_rewrite_pro_variable_en,
+  evaluation_rewrite_generic,
+  evaluation_rewrite_generic_en,
+  evaluation_structured_compare_pair_judge,
+  evaluation_structured_compare_pair_judge_en,
+  evaluation_structured_compare_synthesis,
+  evaluation_structured_compare_synthesis_en,
+  // 参考图内部模板
+  imagePromptCompositionTemplate,
+  imagePromptCompositionTemplateEn,
+  imagePromptMigrationTemplate,
+  imagePromptMigrationTemplateEn,
 };

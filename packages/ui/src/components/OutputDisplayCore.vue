@@ -38,9 +38,9 @@
         </NButtonGroup>
         
         <!-- 右侧：操作按钮 -->
-        <NFlex align="center" :size="8" :wrap="false">
+        <NFlex align="center" :size="6" :wrap="false" class="output-toolbar-actions">
           <slot name="toolbar-right-extra"></slot>
-          <NButtonGroup>
+          <NButtonGroup class="output-toolbar-action-group">
           <NButton
             v-if="isActionEnabled('favorite')"
             @click="handleFavorite"
@@ -399,8 +399,8 @@ const handleCopy = (type: 'content' | 'reasoning' | 'all') => {
       break
     case 'all':
       textToCopy = [
-        displayReasoning.value && `推理过程：\n${displayReasoning.value}`,
-        `主要内容：\n${displayContent.value}`
+        displayReasoning.value && `${t('common.reasoning')}:\n${displayReasoning.value}`,
+        `${t('common.content')}:\n${displayContent.value}`
       ].filter(Boolean).join('\n\n')
       break
   }
@@ -535,7 +535,7 @@ const forceRefreshContent = () => {
 // 收藏相关方法 - 触发保存对话框而不是直接保存
 const handleFavorite = () => {
   if (!props.content) {
-    message.warning('没有内容可以收藏');
+    message.warning(t('toast.error.noContentToSave'));
     return;
   }
 
@@ -571,3 +571,13 @@ watch(() => props.mode, (newMode) => {
 
 defineExpose({ resetReasoningState, forceRefreshContent, forceExitEditing })
 </script>
+
+<style scoped>
+.output-toolbar-actions {
+  flex-shrink: 0;
+}
+
+.output-toolbar-action-group {
+  flex-shrink: 0;
+}
+</style>
