@@ -131,6 +131,43 @@ function extractSectionBody(content, heading, nextHeading = null) {
   return section.slice(firstLineBreak + 1).trim();
 }
 
+function extractSubsectionBody(section, heading) {
+  const startIndex = getHeadingIndex(section, heading);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const bodyStart = section.indexOf('\n', startIndex);
+  if (bodyStart === -1) {
+    return '';
+  }
+
+  const remaining = section.slice(bodyStart + 1);
+  const nextSubsectionMatch = /^###\s+.+$/m.exec(remaining);
+  const body = nextSubsectionMatch
+    ? remaining.slice(0, nextSubsectionMatch.index)
+    : remaining;
+
+  return stripHtmlComments(body).trim();
+}
+
+function isNoChangeProductSubsection(body) {
+  const normalized = String(body || '')
+    .replace(/^[\s*>-]+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) {
+    return true;
+  }
+
+  return (
+    /\bno\b.*\b(extension|desktop)[-\s]specific\b.*\b(user[-\s]facing\s+)?changes?\b/.test(normalized) ||
+    /本次.*没有.*(扩展端|桌面端).*变化/.test(normalized)
+  );
+}
+
 function validateHeadingOrder(block, headings, label) {
   const errors = [];
   let lastIndex = -1;
@@ -167,6 +204,10 @@ function validateProductSubsectionOrder(content, locale) {
   for (const heading of config.productSubsections) {
     const headingIndex = getHeadingIndex(productSection, heading);
     if (headingIndex === -1) {
+      continue;
+    }
+    const subsectionBody = extractSubsectionBody(productSection, heading);
+    if (isNoChangeProductSubsection(subsectionBody)) {
       continue;
     }
     if (headingIndex < lastIndex) {
@@ -499,35 +540,26 @@ function buildTagScopedFileUrl(repository, tag, relativePath) {
 function renderMacSecurityNote(locale) {
   if (locale === 'en') {
     return [
-      '### macOS Security Note',
-      'If macOS says the app is "damaged" or the developer cannot be verified, this is usually a system quarantine warning rather than an app defect.',
-      '',
-      '```bash',
-      'xattr -rd com.apple.quarantine /Applications/PromptOptimizer.app',
-      '```',
-      '',
-      'For a downloaded DMG:',
-      '',
-      '```bash',
-      'xattr -rd com.apple.quarantine ~/Downloads/PromptOptimizer-*.dmg',
-      '```',
+      'macOS note: if macOS reports the app as damaged or cannot verify the developer, this is usually caused by the quarantine attribute on downloaded apps. See the installation guide, or remove it after installing with `xattr -rd com.apple.quarantine /Applications/PromptOptimizer.app`; for a downloaded DMG, you can run the same command on `~/Downloads/PromptOptimizer-*.dmg` before installing.',
     ].join('\n');
   }
 
-  return [
-    '### macOS 安全提示',
-    '如果 macOS 提示“已损坏”或“无法验证开发者”，通常是系统隔离属性导致，并不一定是应用本身有问题。',
-    '',
-    '```bash',
-    'xattr -rd com.apple.quarantine /Applications/PromptOptimizer.app',
-    '```',
-    '',
-    '如果是刚下载的 DMG：',
-    '',
-    '```bash',
-    'xattr -rd com.apple.quarantine ~/Downloads/PromptOptimizer-*.dmg',
-    '```',
-  ].join('\n');
+  if (locale === 'zh-CN') {
+    return [
+      'macOS 备注：如果 macOS 提示“已损坏”或“无法验证开发者”，通常是下载文件的隔离属性导致。请参考安装文档；也可以在安装后执行 `xattr -rd com.apple.quarantine /Applications/PromptOptimizer.app`，或在安装前对 `~/Downloads/PromptOptimizer-*.dmg` 执行同类命令。',
+    ].join('\n');
+  }
+
+  return [renderMacSecurityNote('en'), renderMacSecurityNote('zh-CN')].join('\n');
+}
+
+function prepareReleaseNotesForGitHubBody(content, version, cwd = process.cwd()) {
+  const expectedTitle = `# Prompt Optimizer ${getTagVersion(version, cwd)}`;
+  return stripHtmlComments(content)
+    .replace(new RegExp(`^${escapeRegExp(expectedTitle)}\\s*\\n+`, 'm'), '')
+    .replace(/^###\s+/gm, '#### ')
+    .replace(/^##\s+/gm, '### ')
+    .trim();
 }
 
 function renderGitHubReleaseBody({ cwd = process.cwd(), version, repository }) {
@@ -539,38 +571,31 @@ function renderGitHubReleaseBody({ cwd = process.cwd(), version, repository }) {
   const chineseContent = fs.readFileSync(chinesePath, 'utf8').replace(/\r\n/g, '\n').trim();
   const englishGuideUrl = buildTagScopedFileUrl(repository, tag, 'mkdocs/docs/en/deployment/desktop.md');
   const chineseGuideUrl = buildTagScopedFileUrl(repository, tag, 'mkdocs/docs/zh/deployment/desktop.md');
+  const englishBody = prepareReleaseNotesForGitHubBody(englishContent, normalizedVersion, cwd);
+  const chineseBody = prepareReleaseNotesForGitHubBody(chineseContent, normalizedVersion, cwd);
 
-  const englishSummary = extractSectionBody(englishContent, '## Summary', '## Highlights');
-  const chineseSummary = extractSectionBody(chineseContent, '## 概括', '## 亮点');
-
-  if (englishSummary && chineseSummary) {
-    return [
-      '## English',
-      '',
-      '### Summary',
-      englishSummary,
-      '',
-      renderMacSecurityNote('en'),
-      '',
-      `Installation guide: [English](${englishGuideUrl}) | [中文](${chineseGuideUrl})`,
-      `[Full release notes (EN)](${buildTagScopedFileUrl(repository, tag, getReleaseNotesRelativePath(normalizedVersion, 'en', cwd))})`,
-      '',
-      '---',
-      '',
-      '## 中文',
-      '',
-      '### 概括',
-      chineseSummary,
-      '',
-      renderMacSecurityNote('zh-CN'),
-      '',
-      `安装文档：[English](${englishGuideUrl}) | [中文](${chineseGuideUrl})`,
-      `[完整发布说明（中文）](${buildTagScopedFileUrl(repository, tag, getReleaseNotesRelativePath(normalizedVersion, 'zh-CN', cwd))})`,
-      '',
-    ].join('\n');
-  }
-
-  return [englishContent, '', '---', '', chineseContent, ''].join('\n');
+  return [
+    '## English',
+    '',
+    englishBody,
+    '',
+    `Installation guide: [English](${englishGuideUrl}) | [中文](${chineseGuideUrl})`,
+    `[Source release notes (EN)](${buildTagScopedFileUrl(repository, tag, getReleaseNotesRelativePath(normalizedVersion, 'en', cwd))})`,
+    '',
+    '---',
+    '',
+    '## 中文',
+    '',
+    chineseBody,
+    '',
+    `安装文档：[English](${englishGuideUrl}) | [中文](${chineseGuideUrl})`,
+    `[仓库版本说明（中文）](${buildTagScopedFileUrl(repository, tag, getReleaseNotesRelativePath(normalizedVersion, 'zh-CN', cwd))})`,
+    '',
+    '---',
+    '',
+    renderMacSecurityNote(),
+    '',
+  ].join('\n');
 }
 
 function printUsage() {

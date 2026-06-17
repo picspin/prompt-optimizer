@@ -1,17 +1,26 @@
-import { ref, nextTick, computed, reactive, type Ref } from 'vue'
+import { ref, nextTick, computed, reactive, watch, type Ref } from 'vue'
 import { useToast } from '../ui/useToast'
 import { useI18n } from 'vue-i18n'
 import { getI18nErrorMessage } from '../../utils/error'
 import { v4 as uuidv4 } from 'uuid'
 import type {
+  PromptAssetBinding,
   Template,
   PromptRecord,
   PromptRecordChain,
+  PromptSessionOrigin,
   OptimizationRequest
 } from '@prompt-optimizer/core'
 import type { AppServices } from '../../types/services'
+import { withHistorySourceBindingMetadata } from '../../utils/history-source-binding'
 
 type PromptChain = PromptRecordChain
+
+type SourceBindingSessionLike = {
+  assetBinding?: PromptAssetBinding
+  origin?: PromptSessionOrigin
+  saveSession?: () => Promise<void> | void
+}
 
 export interface ContextUserOptimizationBindings {
   prompt?: Ref<string>
@@ -19,6 +28,12 @@ export interface ContextUserOptimizationBindings {
   optimizedReasoning?: Ref<string>
   currentChainId?: Ref<string>
   currentVersionId?: Ref<string>
+  clearSessionContent?: () => void
+  clearAssetBinding?: () => void
+  saveSession?: () => Promise<void> | void
+  assetBinding?: PromptAssetBinding
+  origin?: PromptSessionOrigin
+  getSourceBindingSession?: () => SourceBindingSessionLike | null | undefined
 }
 
 /**
@@ -44,6 +59,7 @@ export interface UseContextUserOptimization {
   switchToV0: (version: PromptChain['versions'][number]) => Promise<void>  // 🆕 V0 切换
   loadFromHistory: (payload: { rootPrompt?: string, chain: PromptChain, record: PromptRecord }) => void
   saveLocalEdit: (payload: { optimizedPrompt: string; note?: string; source?: 'patch' | 'manual' }) => Promise<void>
+  clearContent: () => void
   handleAnalyze: () => void  // 🆕 分析功能
 }
 
@@ -94,6 +110,19 @@ export function useContextUserOptimization(
   const boundOptimizedReasoning = bindings?.optimizedReasoning ?? ref('')
   const boundCurrentChainId = bindings?.currentChainId ?? ref('')
   const boundCurrentVersionId = bindings?.currentVersionId ?? ref('')
+  const getSourceBindingSession = () => bindings?.getSourceBindingSession?.() ?? bindings
+
+  const saveSessionSnapshot = async (reason: string) => {
+    const sourceSession = getSourceBindingSession()
+    if (!sourceSession?.saveSession) return
+
+    try {
+      await sourceSession.saveSession()
+    } catch (error) {
+      console.error(`[useContextUserOptimization] Failed to save session after ${reason}:`, error)
+      toast.warning(t('toast.warning.saveHistoryFailed'))
+    }
+  }
 
   // 使用 reactive 创建响应式状态对象
   const state = reactive({
@@ -163,10 +192,10 @@ export function useContextUserOptimization(
                   modelKey: selectedOptimizeModel.value,
                   templateId: selectedTemplate.value.id,
                   timestamp: Date.now(),
-                  metadata: {
+                  metadata: withHistorySourceBindingMetadata({
                     optimizationMode: 'user' as const,
                     functionMode: 'pro' as const  // ContextUser 属于 pro 模式
-                  }
+                  }, getSourceBindingSession())
                 }
 
                 const newRecord = await historyManager.value!.createNewChain(recordData)
@@ -174,6 +203,7 @@ export function useContextUserOptimization(
                 state.currentChainId = newRecord.chainId
                 state.currentVersions = newRecord.versions
                 state.currentVersionId = newRecord.currentRecord.id
+                await saveSessionSnapshot('optimization commit')
 
                 toast.success(t('toast.success.optimizeSuccess'))
               } catch (error: unknown) {
@@ -262,11 +292,11 @@ export function useContextUserOptimization(
                     templateId: selectedIterateTemplate.value.id,
                     iterationNote: iterateInput,
                     timestamp: Date.now(),
-                    metadata: {
+                    metadata: withHistorySourceBindingMetadata({
                       optimizationMode: 'user' as const,
                       functionMode: 'pro' as const,
                       createdFromAnalyzeV0: true,
-                    }
+                    }, getSourceBindingSession())
                   })
                 } else {
                   // 保存迭代历史
@@ -276,7 +306,8 @@ export function useContextUserOptimization(
                     optimizedPrompt: state.optimizedPrompt,
                     iterationNote: iterateInput,
                     modelKey: selectedOptimizeModel.value,
-                    templateId: selectedIterateTemplate.value.id
+                    templateId: selectedIterateTemplate.value.id,
+                    metadata: withHistorySourceBindingMetadata(undefined, getSourceBindingSession()),
                   }
 
                   updatedChain = await historyManager.value!.addIteration(iterationData)
@@ -285,6 +316,7 @@ export function useContextUserOptimization(
                 state.currentChainId = updatedChain.chainId
                 state.currentVersions = updatedChain.versions
                 state.currentVersionId = updatedChain.currentRecord.id
+                await saveSessionSnapshot('iteration commit')
 
                 toast.success(t('toast.success.iterateComplete'))
               } catch (error: unknown) {
@@ -404,17 +436,18 @@ export function useContextUserOptimization(
             modelKey,
             templateId,
             timestamp: Date.now(),
-            metadata: {
+            metadata: withHistorySourceBindingMetadata({
               optimizationMode: 'user' as const,
               functionMode: 'pro' as const,
               localEdit: true,
               localEditSource: source || 'manual',
-            }
+            }, getSourceBindingSession())
           }
           const newRecord = await historyManager.value.createNewChain(recordData)
           state.currentChainId = newRecord.chainId
           state.currentVersions = newRecord.versions
           state.currentVersionId = newRecord.currentRecord.id
+          await saveSessionSnapshot('local edit commit')
           return
         }
 
@@ -425,20 +458,31 @@ export function useContextUserOptimization(
           modelKey,
           templateId,
           iterationNote: note || (source === 'patch' ? 'Direct fix' : 'Manual edit'),
-          metadata: {
+          metadata: withHistorySourceBindingMetadata({
             optimizationMode: 'user' as const,
             functionMode: 'pro' as const,
             localEdit: true,
             localEditSource: source || 'manual',
-          }
+          }, getSourceBindingSession())
         })
 
         state.currentVersions = updatedChain.versions
         state.currentVersionId = updatedChain.currentRecord.id
+        await saveSessionSnapshot('local edit commit')
       } catch (error: unknown) {
         console.error('[useContextUserOptimization] Failed to save local edits:', error)
         toast.warning(t('toast.warning.saveHistoryFailed'))
       }
+    },
+
+    clearContent: () => {
+      bindings?.clearSessionContent?.()
+      state.prompt = ''
+      state.optimizedPrompt = ''
+      state.optimizedReasoning = ''
+      state.currentChainId = ''
+      state.currentVersions = []
+      state.currentVersionId = ''
     },
 
     /**
@@ -488,6 +532,14 @@ export function useContextUserOptimization(
   const unwatchIterateTemplate = () => {
     state.selectedIterateTemplate = selectedIterateTemplate.value
   }
+
+  watch(
+    () => [state.currentChainId, state.currentVersionId, state.optimizedPrompt] as const,
+    ([chainId, versionId, optimized]) => {
+      if (chainId || versionId || optimized) return
+      state.currentVersions = []
+    }
+  )
 
   // 返回 reactive 对象
   return state

@@ -197,7 +197,15 @@ const messages = {
       "dynamicLoaded": "已加载动态模型",
       "dynamicFailed": "加载动态模型失败，已回退静态列表",
       "connectionRequired": "请先填写并校验连接信息",
-      "refreshFailed": "刷新模型失败"
+      "refreshFailed": "刷新模型失败",
+      "quickSwitch": {
+        "title": "切换当前图像模型",
+        "placeholder": "选择图像模型",
+        "modelTagTitle": "点击切换当前图像配置的模型",
+        "fetchFailed": "获取在线图像模型列表失败：{error}，可继续选择本地默认模型。",
+        "updateSuccess": "已切换为 {model}",
+        "updateFailed": "切换图像模型失败：{error}"
+      }
     },
     "parameters": {
       "noParameters": "该模型暂无可配置参数",
@@ -208,6 +216,14 @@ const messages = {
       "size": {
         "label": "图像尺寸",
         "description": "生成图像的分辨率/尺寸，如 1024x1024"
+      },
+      "aspect_ratio": {
+        "label": "画面比例",
+        "description": "生成图像的画面宽高比例"
+      },
+      "resolution": {
+        "label": "分辨率档位",
+        "description": "生成图像的分辨率档位"
       },
       "quality": {
         "label": "图像质量",

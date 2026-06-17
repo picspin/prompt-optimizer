@@ -27,6 +27,8 @@ describe('ModelManager', () => {
       id,
       name,
       enabled,
+      providerId: provider.id,
+      modelId: (models[0] || adapter.buildDefaultModel('test-model')).id,
       providerMeta: provider,
       modelMeta: models[0] || adapter.buildDefaultModel('test-model'),
       connectionConfig: {
@@ -74,6 +76,20 @@ describe('ModelManager', () => {
       const invalidModel = { ...createTextModelConfig('invalidKey', 'Invalid'), id: '' };
 
       await expect(modelManager.addModel('invalidKey', invalidModel as TextModelConfig))
+        .rejects.toThrow(ModelConfigError);
+    });
+
+    it('should reject provider/model metadata mismatches', async () => {
+      const openaiModel = createTextModelConfig('badKey', 'BadModel', true, 'test_api_key', 'openai');
+      const compatibleProvider = registry.getAdapter('openai-compatible').getProvider();
+      const invalidModel: TextModelConfig = {
+        ...openaiModel,
+        providerId: undefined,
+        modelId: undefined,
+        providerMeta: compatibleProvider
+      };
+
+      await expect(modelManager.addModel('badKey', invalidModel))
         .rejects.toThrow(ModelConfigError);
     });
   });
@@ -214,6 +230,93 @@ describe('ModelManager', () => {
       expect(reloaded?.modelMeta.name).toBe('Custom OpenAI Model');
       expect(reloaded?.connectionConfig.baseURL).toBe(customBaseURL);
     });
+
+    it('should migrate builtin DeepSeek chat config to V4 Flash with thinking disabled', async () => {
+      const existing = await modelManager.getModel('deepseek')
+      expect(existing).toBeDefined()
+
+      const legacyDeepseek: TextModelConfig = {
+        ...existing!,
+        modelMeta: {
+          ...existing!.modelMeta,
+          id: 'deepseek-chat',
+          name: 'DeepSeek Chat',
+          defaultParameterValues: {}
+        },
+        paramOverrides: {
+          temperature: 0.3
+        }
+      }
+
+      await storageProvider.setItem('models', JSON.stringify({ deepseek: legacyDeepseek }))
+
+      const reloadedManager = new ModelManager(storageProvider, new TextAdapterRegistry())
+      const reloaded = await reloadedManager.getModel('deepseek')
+
+      expect(reloaded?.modelMeta.id).toBe('deepseek-v4-flash')
+      expect(reloaded?.paramOverrides).toEqual({
+        temperature: 0.3,
+        thinking_type: 'disabled'
+      })
+      expect(reloaded?.modelMeta.parameterDefinitions.map((definition) => definition.name)).toContain('thinking_type')
+    })
+
+    it('should migrate builtin DeepSeek reasoner config to V4 Pro with thinking enabled', async () => {
+      const existing = await modelManager.getModel('deepseek')
+      expect(existing).toBeDefined()
+
+      const legacyDeepseekReasoner: TextModelConfig = {
+        ...existing!,
+        modelMeta: {
+          ...existing!.modelMeta,
+          id: 'deepseek-reasoner',
+          name: 'DeepSeek Reasoner',
+          defaultParameterValues: {}
+        },
+        paramOverrides: {}
+      }
+
+      await storageProvider.setItem('models', JSON.stringify({ deepseek: legacyDeepseekReasoner }))
+
+      const reloadedManager = new ModelManager(storageProvider, new TextAdapterRegistry())
+      const reloaded = await reloadedManager.getModel('deepseek')
+
+      expect(reloaded?.modelMeta.id).toBe('deepseek-v4-pro')
+      expect(reloaded?.paramOverrides).toEqual({
+        thinking_type: 'enabled',
+        reasoning_effort: 'high'
+      })
+    })
+
+    it('should preserve custom DeepSeek model id while patching DeepSeek parameters', async () => {
+      const existing = await modelManager.getModel('deepseek')
+      expect(existing).toBeDefined()
+
+      const customDeepseek: TextModelConfig = {
+        ...existing!,
+        id: 'custom-deepseek',
+        name: 'Custom DeepSeek',
+        modelId: 'custom-deepseek-model',
+        modelMeta: {
+          ...existing!.modelMeta,
+          id: 'custom-deepseek-model',
+          name: 'Custom DeepSeek Model',
+          parameterDefinitions: [],
+          defaultParameterValues: {}
+        },
+        paramOverrides: {}
+      }
+
+      await modelManager.addModel('custom-deepseek', customDeepseek)
+
+      const reloaded = await modelManager.getModel('custom-deepseek')
+
+      expect(reloaded?.modelMeta.id).toBe('custom-deepseek-model')
+      expect(reloaded?.modelMeta.parameterDefinitions.map((definition) => definition.name)).toContain('thinking_type')
+      expect(reloaded?.paramOverrides).toEqual({
+        thinking_type: 'disabled'
+      })
+    })
   });
 
   describe('provider metadata patching', () => {
@@ -250,7 +353,10 @@ describe('ModelManager', () => {
           ...providerWithoutCors,
           name: 'Legacy Provider Name'
         },
-        modelMeta: models[0] || baseAdapter.buildDefaultModel('test-model'),
+        modelMeta: {
+          ...(models[0] || baseAdapter.buildDefaultModel('test-model')),
+          providerId: 'test-provider'
+        },
         connectionConfig: {
           apiKey: 'test_api_key',
           baseURL: baseProvider.defaultBaseURL
@@ -291,7 +397,10 @@ describe('ModelManager', () => {
           name: 'Test Provider',
           corsRestricted: true
         },
-        modelMeta: models[0] || baseAdapter.buildDefaultModel('test-model'),
+        modelMeta: {
+          ...(models[0] || baseAdapter.buildDefaultModel('test-model')),
+          providerId: 'test-provider'
+        },
         connectionConfig: {
           apiKey: 'test_api_key',
           baseURL: baseProvider.defaultBaseURL
@@ -343,6 +452,196 @@ describe('ModelManager', () => {
     it('should throw ModelConfigError when updating a non-existent model', async () => {
       await expect(modelManager.updateModel('nonExistentKey', { name: 'NewName' }))
         .rejects.toThrow(ModelConfigError);
+    });
+
+    it('should reject updates that leave provider and model metadata out of sync', async () => {
+      const originalModel = createTextModelConfig('updateMismatchKey', 'OriginalName', true, 'test_api_key', 'openai');
+      await modelManager.addModel('updateMismatchKey', originalModel);
+
+      await expect(modelManager.updateModel('updateMismatchKey', {
+        providerMeta: registry.getAdapter('openai-compatible').getProvider()
+      })).rejects.toThrow(ModelConfigError);
+    });
+
+    it('should resolve metadata from providerId/modelId identity updates', async () => {
+      const originalModel = createTextModelConfig('identityUpdateKey', 'OriginalName', true, 'test_api_key', 'openai');
+      await modelManager.addModel('identityUpdateKey', originalModel);
+
+      await modelManager.updateModel('identityUpdateKey', {
+        providerId: 'openai-compatible',
+        modelId: 'vendor-custom-model'
+      });
+
+      const updated = await modelManager.getModel('identityUpdateKey');
+      expect(updated?.providerId).toBe('openai-compatible');
+      expect(updated?.providerMeta.id).toBe('openai-compatible');
+      expect(updated?.modelId).toBe('vendor-custom-model');
+      expect(updated?.modelMeta.id).toBe('vendor-custom-model');
+      expect(updated?.modelMeta.providerId).toBe('openai-compatible');
+    });
+
+    it('should repair stale stored metadata when explicit identity fields exist', async () => {
+      const originalModel = createTextModelConfig('staleStoredKey', 'OriginalName', true, 'test_api_key', 'openai');
+      await storageProvider.setItem('models', JSON.stringify({
+        staleStoredKey: {
+          ...originalModel,
+          providerId: 'openai-compatible',
+          modelId: 'vendor-custom-model'
+        }
+      }));
+
+      const updated = await modelManager.getModel('staleStoredKey');
+
+      expect(updated?.providerId).toBe('openai-compatible');
+      expect(updated?.providerMeta.id).toBe('openai-compatible');
+      expect(updated?.modelId).toBe('vendor-custom-model');
+      expect(updated?.modelMeta.providerId).toBe('openai-compatible');
+    });
+
+    it('should import identity-only text model configs by resolving metadata', async () => {
+      await modelManager.importData([{
+        id: 'identity-import',
+        name: 'Identity Import',
+        enabled: true,
+        providerId: 'openai-compatible',
+        modelId: 'imported-custom-model',
+        connectionConfig: {
+          apiKey: 'import-key',
+          baseURL: 'https://gateway.example.com/v1'
+        },
+        paramOverrides: {}
+      }]);
+
+      const imported = await modelManager.getModel('identity-import');
+      expect(imported?.providerMeta.id).toBe('openai-compatible');
+      expect(imported?.modelMeta.id).toBe('imported-custom-model');
+      expect(imported?.modelMeta.providerId).toBe('openai-compatible');
+
+      const exported = await modelManager.exportData();
+      const exportedImport = exported.find(config => config.id === 'identity-import');
+      expect(exportedImport?.providerId).toBe('openai-compatible');
+      expect(exportedImport?.modelId).toBe('imported-custom-model');
+      expect(exportedImport?.providerMeta.id).toBe('openai-compatible');
+      expect(exportedImport?.modelMeta.providerId).toBe('openai-compatible');
+    });
+
+    it('should isolate malformed metadata configs instead of failing the full model list', async () => {
+      await storageProvider.setItem('models', JSON.stringify({
+        custom_broken: {
+          id: 'custom_broken',
+          name: 'Broken Model',
+          enabled: true,
+          providerMeta: {},
+          modelMeta: {},
+          connectionConfig: {
+            apiKey: 'keep-key',
+            baseURL: 'https://broken.example.com/v1'
+          },
+          paramOverrides: {
+            temperature: 0.2
+          }
+        },
+        openai: createTextModelConfig('openai', 'OpenAI')
+      }));
+
+      const allModels = await modelManager.getAllModels();
+      const broken = allModels.find(model => model.id === 'custom_broken');
+      const enabled = await modelManager.getEnabledModels();
+
+      expect(broken).toBeDefined();
+      expect(broken?.enabled).toBe(false);
+      expect(broken?.providerId).toBe('unknown');
+      expect(broken?.modelId).toBe('unknown');
+      expect(broken?.connectionConfig.apiKey).toBe('keep-key');
+      expect(broken?.paramOverrides).toEqual({ temperature: 0.2 });
+      expect(enabled.some(model => model.id === 'custom_broken')).toBe(false);
+      expect(allModels.some(model => model.id === 'openai')).toBe(true);
+    });
+
+    it('should repair malformed builtin custom config from defaults while preserving user settings', async () => {
+      await storageProvider.setItem('models', JSON.stringify({
+        custom: {
+          id: 'custom',
+          name: 'My Custom Gateway',
+          enabled: true,
+          providerMeta: {},
+          modelMeta: {},
+          connectionConfig: {
+            apiKey: 'keep-custom-key',
+            baseURL: 'https://gateway.example.com/v1'
+          },
+          paramOverrides: {
+            temperature: 0.2
+          }
+        }
+      }));
+
+      const repaired = await modelManager.getModel('custom');
+
+      expect(repaired?.enabled).toBe(true);
+      expect(repaired?.name).toBe('My Custom Gateway');
+      expect(repaired?.providerId).toBe('openai-compatible');
+      expect(repaired?.providerMeta.id).toBe('openai-compatible');
+      expect(repaired?.modelId).toBeTruthy();
+      expect(repaired?.modelId).not.toBe('unknown');
+      expect(repaired?.modelMeta.id).toBe(repaired?.modelId);
+      expect(repaired?.modelMeta.providerId).toBe('openai-compatible');
+      expect(repaired?.connectionConfig.apiKey).toBe('keep-custom-key');
+      expect(repaired?.connectionConfig.baseURL).toBe('https://gateway.example.com/v1');
+      expect(repaired?.paramOverrides).toEqual({ temperature: 0.2 });
+    });
+
+    it('should preserve partial builtin custom identity and legacy custom parameter overrides during repair', async () => {
+      await storageProvider.setItem('models', JSON.stringify({
+        custom: {
+          id: 'custom',
+          name: 'Partial Custom Gateway',
+          enabled: true,
+          providerMeta: {},
+          modelMeta: {
+            id: 'user-selected-model'
+          },
+          connectionConfig: {
+            apiKey: 'keep-custom-key',
+            baseURL: 'https://gateway.example.com/v1'
+          },
+          customParamOverrides: {
+            temperature: 0.3,
+            top_p: 0.8
+          }
+        }
+      }));
+
+      const repaired = await modelManager.getModel('custom');
+
+      expect(repaired?.providerId).toBe('openai-compatible');
+      expect(repaired?.modelId).toBe('user-selected-model');
+      expect(repaired?.modelMeta.id).toBe('user-selected-model');
+      expect(repaired?.modelMeta.providerId).toBe('openai-compatible');
+      expect(repaired?.connectionConfig.apiKey).toBe('keep-custom-key');
+      expect(repaired?.paramOverrides).toMatchObject({
+        temperature: 0.3,
+        top_p: 0.8
+      });
+    });
+
+    it('should return a disabled placeholder for a single malformed model config', async () => {
+      await storageProvider.setItem('models', JSON.stringify({
+        brokenSingle: {
+          id: 'brokenSingle',
+          name: 'Broken Single',
+          providerMeta: {},
+          modelMeta: {},
+          connectionConfig: {}
+        }
+      }));
+
+      const broken = await modelManager.getModel('brokenSingle');
+
+      expect(broken?.id).toBe('brokenSingle');
+      expect(broken?.enabled).toBe(false);
+      expect(broken?.providerMeta.id).toBe('unknown');
+      expect(broken?.modelMeta.id).toBe('unknown');
     });
   });
 

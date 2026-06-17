@@ -14,6 +14,7 @@ const messages = {
     "modelKey": "模型標識",
     "apiUrl": "API位址",
     "apiUrlHint": "範例：https://api.example.com/v1；多數提供商位址通常以 /v1 結尾",
+    "apiUrlHintAriaLabel": "顯示 API 位址說明",
     "defaultModel": "預設模型",
     "clickToFetchModels": "點選箭頭取得模型清單",
     "apiKey": "API金鑰",
@@ -23,10 +24,60 @@ const messages = {
     "provider": {
       "section": "提供商配置",
       "label": "提供商",
-      "placeholder": "選擇提供商"
+      "placeholder": "選擇提供商",
+      "more": "更多",
+      "openaiCompatibleCustomLabel": "OpenAI 相容（自訂）",
+      "openaiHint": "這是官方 OpenAI API 入口。如果你想接入自訂 Base URL、第三方相容服務或本地模型，請選擇「OpenAI 相容（自訂）」。",
+      "customApiHint": "用於接入自訂 OpenAI 相容接口。你可以配置 Base URL、自訂模型名稱，並選擇 Chat Completions 或 Responses 請求風格。",
+      "dashscopeHint": "阿里百鍊已支援 OpenAI 相容的 Chat Completions 與 Responses 接口，目前可直接在這裡切換請求風格使用。",
+      "xiaomiMimoHint": "預設使用小米 MiMo Token Plan 中國區位址：https://token-plan-cn.xiaomimimo.com/v1。也可依訂閱管理頁改為新加坡 https://token-plan-sgp.xiaomimimo.com/v1 或阿姆斯特丹 https://token-plan-ams.xiaomimimo.com/v1。環境變數預置使用 VITE_MIMO_TOKEN_PLAN_*。",
+      "minimaxHint": "預設位址是 MiniMax 海外 OpenAI 相容接口。中國大陸用戶請將 API 位址改為 https://api.minimaxi.com/v1；這裡不要使用 MiniMax 的 Anthropic 格式位址。",
+      "chromeBuiltInHint": "使用 Chrome 內建的本地 Gemini Nano 模型，無需第三方 API Key。模型由 Chrome 管理，首次使用可能需要使用者明確下載。目前 Chrome 官方僅支援英文、西班牙文、日文輸出，本提供商會預設按英文會話相容處理。"
+    },
+    "chromeBuiltIn": {
+      "downloadAction": "下載/準備本地模型",
+      "recheckAction": "重新檢測",
+      "preparing": "正在準備 Chrome 本地模型...",
+      "ready": "Chrome 本地模型已可用",
+      "prepareFailed": "準備 Chrome 本地模型失敗：{error}",
+      "statusWithError": "{status}（{error}）",
+      "title": {
+        "checking": "正在檢測 Chrome 本地 AI",
+        "available": "Chrome 本地 AI 已可用",
+        "downloadable": "需要下載 Chrome 本地模型",
+        "downloading": "Chrome 正在下載本地模型",
+        "unavailable": "目前環境暫不支援",
+        "api-missing": "目前瀏覽器沒有 Chrome Prompt API"
+      },
+      "status": {
+        "checking": "正在檢查瀏覽器是否提供 Prompt API，以及本地模型是否已準備好。",
+        "available": "可以直接使用，無需填寫 API 位址或金鑰。當前會按英文輸出能力建立會話；Chrome 官方目前僅支援英文、西班牙文、日文輸出。",
+        "downloadable": "你的 Chrome 支援該能力，但本地模型尚未下載。只有點擊下方按鈕後，才會請求 Chrome 下載模型。",
+        "downloading": "Chrome 正在下載模型。下載可能需要一些時間，完成後可以直接測試或儲存啟用。",
+        "unavailable": "目前瀏覽器、設備、使用者設定或企業政策可能不支援該能力。你仍然可以配置其他文字模型提供商。",
+        "api-missing": "請在支援 Prompt API 的 Chrome 中開啟 Web 版。其他瀏覽器會安全降級，不會報錯。"
+      }
     },
     "connection": {
-      "accountId": "帳戶 ID"
+      "accountId": "帳戶 ID",
+      "requestStyle": "請求風格",
+      "requestStyleOptions": {
+        "chatCompletions": "Chat Completions",
+        "responses": "Responses"
+      }
+    },
+    "customHeaders": {
+      "label": "自訂請求頭",
+      "namePlaceholder": "Header 名稱，如 x-auth-token",
+      "valuePlaceholder": "Header 值",
+      "add": "新增請求頭",
+      "validationError": "自訂請求頭配置無效：{details}",
+      "validation": {
+        "invalid-name": "Header 名稱格式無效",
+        "forbidden-name": "該 Header 由客戶端或瀏覽器管理，不能覆蓋",
+        "missing-value": "Header 值不能為空",
+        "invalid-value": "Header 值必須是文字、數字或布林值"
+      }
     },
     "model": {
       "section": "模型配置"
@@ -58,7 +109,11 @@ const messages = {
         "belowMin": "參數值不能小於 {min}",
         "aboveMax": "參數值不能大於 {max}",
         "mustBeInteger": "參數值必須是整數"
-      }
+      },
+      "formatJson": "JSON",
+      "formatString": "字串",
+      "parsedAsObject": "已解析為 Object ✓",
+      "invalidJson": "無效 JSON，將作為字串發送"
     },
     "modelKeyPlaceholder": "請輸入模型標識",
     "displayNamePlaceholder": "請輸入顯示名稱",
@@ -142,6 +197,14 @@ const messages = {
       "noModels": "請配置模型",
       "noAvailableModels": "暫無可用模型"
     },
+    "quickSwitch": {
+      "title": "切換目前模型",
+      "placeholder": "選擇模型",
+      "modelTagTitle": "點擊切換目前配置的模型",
+      "fetchFailed": "取得線上模型列表失敗：{error}，可繼續選擇本地預設模型。",
+      "updateSuccess": "已切換為 {model}",
+      "updateFailed": "切換模型失敗：{error}"
+    },
     "manager": {
       "displayName": "例如: 自訂模型",
       "apiUrl": "API 位址",
@@ -198,6 +261,18 @@ const messages = {
       "label": "包含思考過程",
       "description": "是否在回應中包含模型的思考過程（僅 Gemini 2.5+）。啟用後可以看到模型的推理步驟。"
     },
+    "reasoning_effort": {
+      "label": "推理強度",
+      "description": "控制支援思考模式的模型投入的推理強度。"
+    },
+    "deepseek": {
+      "thinking_type": {
+        "label": "思考模式",
+        "description": "控制 DeepSeek 思考模式，會作為 thinking.type 傳送到 API 請求中。",
+        "disabled": "關閉",
+        "enabled": "開啟"
+      }
+    },
     "tokens": {
       "unit": "令牌"
     },
@@ -237,6 +312,10 @@ const messages = {
       "label": "回應格式",
       "description": "回應圖片的格式（URL 或 Base64 編碼）"
     },
+    "outputFormat": {
+      "label": "輸出格式",
+      "description": "指定生成圖像的檔案格式（如 PNG、JPEG 或 WebP）"
+    },
     "watermark": {
       "label": "浮水印",
       "description": "是否在生成的圖像上新增浮水印"
@@ -244,6 +323,10 @@ const messages = {
     "sequentialGeneration": {
       "label": "序列生成",
       "description": "控制序列圖像生成模式（支援的模型）"
+    },
+    "tools": {
+      "label": "工具",
+      "description": "5.0 系列擴充工具列表，每行一個工具名稱"
     },
     "seed": {
       "label": "隨機種子",

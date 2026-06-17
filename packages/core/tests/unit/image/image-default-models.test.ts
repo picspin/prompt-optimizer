@@ -9,6 +9,10 @@ describe('default image models', () => {
 
   beforeEach(() => {
     process.env = { ...env }
+    delete process.env.VITE_OPENAI_API_KEY
+    delete process.env.VITE_OPENAI_BASE_URL
+    delete process.env.VITE_GROK_API_KEY
+    delete process.env.VITE_XAI_API_KEY
     delete process.env.VITE_CF_API_TOKEN
     delete process.env.VITE_CF_ACCOUNT_ID
     delete process.env.CF_API_TOKEN
@@ -30,6 +34,24 @@ describe('default image models', () => {
     expect(models['image-seedream'].enabled).toBe(true)
   })
 
+  it('keeps the builtin image-seedream config pinned to the 4.0 model for compatibility', () => {
+    process.env.VITE_SEEDREAM_API_KEY = 'seed'
+    const models = getDefaultImageModels(registry)
+
+    expect(models['image-seedream'].modelId).toBe('doubao-seedream-4-0-250828')
+    expect(models['image-seedream'].model.name).toBe('Doubao Seedream 4.0')
+  })
+
+  it('adds a builtin Seedream 5.0 lite config while keeping the 4.0 config intact', () => {
+    process.env.VITE_SEEDREAM_API_KEY = 'seed'
+    const models = getDefaultImageModels(registry)
+
+    expect(models['image-seedream-50-lite']).toBeDefined()
+    expect(models['image-seedream-50-lite'].providerId).toBe('seedream')
+    expect(models['image-seedream-50-lite'].modelId).toBe('doubao-seedream-5-0-260128')
+    expect(models['image-seedream-50-lite'].enabled).toBe(true)
+  })
+
   it('includes OpenRouter configuration when API key is present', () => {
     process.env.VITE_OPENROUTER_API_KEY = 'openrouter-key'
     const models = getDefaultImageModels(registry)
@@ -42,12 +64,38 @@ describe('default image models', () => {
     expect(models['image-openrouter-nanobanana'].enabled).toBe(true)
   })
 
+  it('uses GPT Image 2 for the builtin OpenAI image configuration', () => {
+    process.env.VITE_OPENAI_API_KEY = 'openai-key'
+    const models = getDefaultImageModels(registry)
+    const openaiConfig = models['image-openai-gpt']
+
+    expect(openaiConfig).toBeDefined()
+    expect(openaiConfig.providerId).toBe('openai')
+    expect(openaiConfig.modelId).toBe('gpt-image-2')
+    expect(openaiConfig.model.id).toBe('gpt-image-2')
+    expect(openaiConfig.model.capabilities.multiImage).toBe(true)
+    expect(openaiConfig.connectionConfig?.apiKey).toBe('openai-key')
+    expect(openaiConfig.enabled).toBe(true)
+  })
+
   it('disables OpenRouter configuration when API key is missing', () => {
     delete process.env.VITE_OPENROUTER_API_KEY
     const models = getDefaultImageModels(registry)
 
     expect(models['image-openrouter-nanobanana']).toBeDefined()
     expect(models['image-openrouter-nanobanana'].enabled).toBe(false)
+  })
+
+  it('includes Ollama but keeps it disabled without explicit user configuration', () => {
+    const models = getDefaultImageModels(registry)
+    const ollamaConfig = models['image-ollama']
+
+    expect(ollamaConfig).toBeDefined()
+    expect(ollamaConfig.providerId).toBe('ollama')
+    expect(ollamaConfig.provider.requiresApiKey).toBe(false)
+    expect(ollamaConfig.connectionConfig?.apiKey).toBe('')
+    expect(ollamaConfig.connectionConfig?.baseURL).toBe('http://localhost:11434/v1')
+    expect(ollamaConfig.enabled).toBe(false)
   })
 
   it('OpenRouter model has correct provider and model information', () => {
@@ -100,5 +148,21 @@ describe('default image models', () => {
     expect(models['image-cloudflare-flux-klein'].connectionConfig?.apiKey).toBe('')
     expect(models['image-cloudflare-flux-klein'].connectionConfig?.accountId).toBe('')
     expect(models['image-cloudflare-flux-klein'].enabled).toBe(false)
+  })
+
+  it('includes Grok Imagine configuration with the current image-quality model', () => {
+    process.env.VITE_GROK_API_KEY = 'grok-image-key'
+
+    const models = getDefaultImageModels(registry)
+    const grokConfig = models['image-grok-imagine']
+
+    expect(grokConfig).toBeDefined()
+    expect(grokConfig.providerId).toBe('grok')
+    expect(grokConfig.modelId).toBe('grok-imagine-image-quality')
+    expect(grokConfig.model.capabilities.text2image).toBe(true)
+    expect(grokConfig.model.capabilities.image2image).toBe(true)
+    expect(grokConfig.model.capabilities.multiImage).toBe(true)
+    expect(grokConfig.connectionConfig?.apiKey).toBe('grok-image-key')
+    expect(grokConfig.enabled).toBe(true)
   })
 })

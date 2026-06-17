@@ -14,6 +14,7 @@ const messages = {
     "modelKey": "Model Key",
     "apiUrl": "API URL",
     "apiUrlHint": "Example: https://api.example.com/v1; most providers use endpoints ending with /v1",
+    "apiUrlHintAriaLabel": "Show API URL help",
     "defaultModel": "Default Model",
     "clickToFetchModels": "Click arrow to fetch model list",
     "apiKey": "API Key",
@@ -23,10 +24,60 @@ const messages = {
     "provider": {
       "section": "Provider Configuration",
       "label": "Provider",
-      "placeholder": "Select Provider"
+      "placeholder": "Select Provider",
+      "more": "More",
+      "openaiCompatibleCustomLabel": "OpenAI Compatible (Custom)",
+      "openaiHint": "This is the official OpenAI API. If you want a custom base URL, a third-party compatible service, or a local model, choose \"OpenAI Compatible (Custom)\" instead.",
+      "customApiHint": "Use this for custom OpenAI-compatible endpoints. You can configure the base URL, use your own model name, and choose Chat Completions or Responses as the request style.",
+      "dashscopeHint": "DashScope supports both OpenAI-compatible Chat Completions and Responses APIs. You can switch the request style here directly.",
+      "xiaomiMimoHint": "Defaults to the Xiaomi MiMo Token Plan China endpoint: https://token-plan-cn.xiaomimimo.com/v1. You can change it to the Singapore endpoint https://token-plan-sgp.xiaomimimo.com/v1 or Amsterdam endpoint https://token-plan-ams.xiaomimimo.com/v1 shown in Subscription Management. Env presets use VITE_MIMO_TOKEN_PLAN_*.",
+      "minimaxHint": "The default endpoint is the global MiniMax OpenAI-compatible API. Mainland China users should set API URL to https://api.minimaxi.com/v1. Do not use Anthropic-format MiniMax endpoints here.",
+      "chromeBuiltInHint": "Use Chrome's local Gemini Nano model without a third-party API key. Chrome manages the model, and first use may require an explicit user download. Chrome currently officially supports English, Spanish, and Japanese output; this provider defaults to English for compatibility."
+    },
+    "chromeBuiltIn": {
+      "downloadAction": "Download / prepare local model",
+      "recheckAction": "Recheck",
+      "preparing": "Preparing Chrome local model...",
+      "ready": "Chrome local model is ready",
+      "prepareFailed": "Failed to prepare Chrome local model: {error}",
+      "statusWithError": "{status} ({error})",
+      "title": {
+        "checking": "Checking Chrome built-in AI",
+        "available": "Chrome built-in AI is ready",
+        "downloadable": "Chrome local model needs download",
+        "downloading": "Chrome is downloading the local model",
+        "unavailable": "This environment is not supported",
+        "api-missing": "This browser does not expose Chrome Prompt API"
+      },
+      "status": {
+        "checking": "Checking whether this browser exposes the Prompt API and whether the local model is ready.",
+        "available": "Ready to use without an API URL or API key. Sessions default to English because Chrome currently officially supports English, Spanish, and Japanese output.",
+        "downloadable": "Your Chrome supports this feature, but the local model is not downloaded yet. Chrome is only asked to download it after you click the button below.",
+        "downloading": "Chrome is downloading the model. This may take a while; once it finishes, you can test or save this model.",
+        "unavailable": "This browser, device, user profile, or managed policy may not support the feature. You can still configure another text model provider.",
+        "api-missing": "Open the Web app in a Chrome version that supports the Prompt API. Other browsers safely degrade without runtime errors."
+      }
     },
     "connection": {
-      "accountId": "Account ID"
+      "accountId": "Account ID",
+      "requestStyle": "Request Style",
+      "requestStyleOptions": {
+        "chatCompletions": "Chat Completions",
+        "responses": "Responses"
+      }
+    },
+    "customHeaders": {
+      "label": "Custom Request Headers",
+      "namePlaceholder": "Header name, e.g. x-auth-token",
+      "valuePlaceholder": "Header value",
+      "add": "Add Header",
+      "validationError": "Invalid custom request headers: {details}",
+      "validation": {
+        "invalid-name": "Invalid header name",
+        "forbidden-name": "This header is managed by the client or browser and cannot be overridden",
+        "missing-value": "Header value is required",
+        "invalid-value": "Header value must be text, number, or boolean"
+      }
     },
     "model": {
       "section": "Model Configuration"
@@ -58,7 +109,11 @@ const messages = {
         "belowMin": "Value cannot be less than {min}",
         "aboveMax": "Value cannot be greater than {max}",
         "mustBeInteger": "Must be an integer"
-      }
+      },
+      "formatJson": "JSON",
+      "formatString": "String",
+      "parsedAsObject": "Parsed as Object ✓",
+      "invalidJson": "Invalid JSON, will be sent as string"
     },
     "modelKeyPlaceholder": "Enter model key",
     "displayNamePlaceholder": "Enter display name",
@@ -142,6 +197,14 @@ const messages = {
       "noModels": "No model",
       "noAvailableModels": "No available models"
     },
+    "quickSwitch": {
+      "title": "Switch current model",
+      "placeholder": "Select a model",
+      "modelTagTitle": "Click to switch the model for this configuration",
+      "fetchFailed": "Failed to fetch online models: {error}. You can still choose a local default model.",
+      "updateSuccess": "Switched to {model}",
+      "updateFailed": "Failed to switch model: {error}"
+    },
     "manager": {
       "displayName": "e.g., Custom Model",
       "apiUrl": "API URL",
@@ -198,6 +261,18 @@ const messages = {
       "label": "Include Thoughts",
       "description": "Whether to include the model's thinking process in the response (Gemini 2.5+ only). When enabled, you can see the model's reasoning steps."
     },
+    "reasoning_effort": {
+      "label": "Reasoning Effort",
+      "description": "Controls the reasoning effort for models that support thinking mode."
+    },
+    "deepseek": {
+      "thinking_type": {
+        "label": "Thinking Mode",
+        "description": "Controls DeepSeek thinking mode. Sent as thinking.type in the API request.",
+        "disabled": "Disabled",
+        "enabled": "Enabled"
+      }
+    },
     "tokens": {
       "unit": "tokens"
     },
@@ -237,6 +312,10 @@ const messages = {
       "label": "Response Format",
       "description": "Format of the returned image (URL or Base64)"
     },
+    "outputFormat": {
+      "label": "Output Format",
+      "description": "File format for the generated image (such as PNG, JPEG, or WebP)"
+    },
     "watermark": {
       "label": "Watermark",
       "description": "Whether to add a watermark to the generated image"
@@ -244,6 +323,10 @@ const messages = {
     "sequentialGeneration": {
       "label": "Sequential Generation",
       "description": "Control sequential image generation mode (for supported models)"
+    },
+    "tools": {
+      "label": "Tools",
+      "description": "List of 5.0 series extension tools, one tool name per line"
     },
     "seed": {
       "label": "Seed",

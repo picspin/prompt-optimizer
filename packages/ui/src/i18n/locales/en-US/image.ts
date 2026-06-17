@@ -197,7 +197,15 @@ const messages = {
       "dynamicLoaded": "Dynamic models loaded",
       "dynamicFailed": "Failed to load dynamic models, fell back to static list",
       "connectionRequired": "Please fill and validate connection first",
-      "refreshFailed": "Failed to refresh models"
+      "refreshFailed": "Failed to refresh models",
+      "quickSwitch": {
+        "title": "Switch current image model",
+        "placeholder": "Select image model",
+        "modelTagTitle": "Click to switch the model for this image configuration",
+        "fetchFailed": "Failed to fetch online image models: {error}. You can still choose a local default model.",
+        "updateSuccess": "Switched to {model}",
+        "updateFailed": "Failed to switch image model: {error}"
+      }
     },
     "parameters": {
       "noParameters": "No configurable parameters for this model",
@@ -208,6 +216,14 @@ const messages = {
       "size": {
         "label": "Image Size",
         "description": "Generated image resolution/size, e.g., 1024x1024"
+      },
+      "aspect_ratio": {
+        "label": "Aspect Ratio",
+        "description": "Generated image aspect ratio"
+      },
+      "resolution": {
+        "label": "Resolution",
+        "description": "Generated image resolution tier"
       },
       "quality": {
         "label": "Image Quality",

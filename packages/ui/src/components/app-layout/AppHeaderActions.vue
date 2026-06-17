@@ -9,63 +9,76 @@
         设计说明:
         - 从 App.vue 的 #actions slot 提取出来
         - 所有操作通过 emits 通知父组件处理
-        - 保持与原实现完全一致的 UI 和行为
+        - 收藏夹是页面型目的地，其余管理入口保持弹窗型交互
     -->
-    <!-- 核心功能区 -->
-    <ActionButtonUI
-        icon="📝"
-        :text="$t('nav.templates')"
-        @click="emit('open-templates')"
-        type="default"
-        size="medium"
-        :ghost="false"
-        :round="true"
-    />
-    <ActionButtonUI
-        icon="📜"
-        :text="$t('nav.history')"
-        @click="emit('open-history')"
-        type="default"
-        size="medium"
-        :ghost="false"
-        :round="true"
-    />
-    <ActionButtonUI
-        icon="⚙️"
-        :text="$t('nav.modelManager')"
-        @click="emit('open-model-manager')"
-        type="default"
-        size="medium"
-        :ghost="false"
-        :round="true"
-    />
-    <ActionButtonUI
-        icon="⭐"
-        :text="$t('nav.favorites')"
-        @click="emit('open-favorites')"
-        type="default"
-        size="medium"
-        :ghost="false"
-        :round="true"
-    />
-    <ActionButtonUI
-        icon="💾"
-        :text="$t('nav.dataManager')"
-        @click="emit('open-data-manager')"
-        type="default"
-        size="medium"
-        :ghost="false"
-        :round="true"
-    />
-    <ActionButtonUI
-        icon="🔣"
-        :text="$t('nav.variableManager')"
-        @click="emit('open-variables')"
-        type="default"
-        size="medium"
-        :ghost="false"
-        :round="true"
-    />
+    <!-- 页面型管理入口：会接管主内容区 -->
+    <div class="page-destination-group" data-testid="header-page-destinations">
+        <ActionButtonUI
+            icon="⭐"
+            :text="$t('nav.favorites')"
+            @click="emit('open-favorites')"
+            :type="favoritesActive ? 'primary' : 'default'"
+            data-testid="header-favorites-page-action"
+            size="medium"
+            :ghost="false"
+            :round="true"
+            :title="$t('favorites.page.title')"
+            :aria-current="favoritesActive ? 'page' : undefined"
+            :class="{ 'page-destination-active': favoritesActive }"
+        />
+    </div>
+
+    <!-- 弹窗型管理/配置入口 -->
+    <div class="modal-action-group" data-testid="header-modal-actions">
+        <ActionButtonUI
+            icon="📝"
+            :text="$t('nav.templates')"
+            @click="emit('open-templates')"
+            type="default"
+            size="medium"
+            :ghost="false"
+            :round="true"
+        />
+        <ActionButtonUI
+            icon="📜"
+            :text="$t('nav.history')"
+            @click="emit('open-history')"
+            type="default"
+            size="medium"
+            :ghost="false"
+            :round="true"
+        />
+        <ActionButtonUI
+            icon="⚙️"
+            :text="$t('nav.modelManager')"
+            @click="emit('open-model-manager')"
+            type="default"
+            size="medium"
+            :ghost="false"
+            :round="true"
+        />
+        <NBadge :show="backupReminderDue" dot processing>
+            <ActionButtonUI
+                icon="💾"
+                :text="$t('nav.dataManager')"
+                @click="emit('open-data-manager')"
+                :type="backupReminderDue ? 'warning' : 'default'"
+                size="medium"
+                :ghost="false"
+                :round="true"
+                :title="backupReminderDue ? $t('dataManager.backupReminder.tooltip') : $t('nav.dataManager')"
+            />
+        </NBadge>
+        <ActionButtonUI
+            icon="🔣"
+            :text="$t('nav.variableManager')"
+            @click="emit('open-variables')"
+            type="default"
+            size="medium"
+            :ghost="false"
+            :round="true"
+        />
+    </div>
     <!-- 辅助功能区 - 使用简化样式降低视觉权重 -->
     <ThemeToggleUI />
     <div class="aux-icon-group">
@@ -193,7 +206,7 @@
  *     @open-templates="openTemplateManager"
  *     @open-history="historyManager.showHistory = true"
  *     @open-model-manager="modelManager.showConfig = true"
- *     @open-favorites="showFavoriteManager = true"
+ *     @open-favorites="openFavoritesPage"
  *     @open-data-manager="showDataManager = true"
  *     :app-version="appVersion"
  *     @open-website="openOfficialWebsite"
@@ -209,13 +222,18 @@ import ActionButtonUI from '../ActionButton.vue'
 import ThemeToggleUI from '../ThemeToggleUI.vue'
 import LanguageSwitchDropdown from '../LanguageSwitchDropdown.vue'
 import UpdaterIcon from '../UpdaterIcon.vue'
-import { NButton, NPopover, NTag } from 'naive-ui'
+import { NBadge, NButton, NPopover, NTag } from 'naive-ui'
 
 interface Props {
     appVersion: string
+    favoritesActive?: boolean
+    backupReminderDue?: boolean
 }
 
-defineProps<Props>()
+withDefaults(defineProps<Props>(), {
+    favoritesActive: false,
+    backupReminderDue: false,
+})
 
 // ========================
 // Emits 定义
@@ -277,6 +295,22 @@ const handleOpenDocs = () => {
     margin-left: 6px;
 }
 
+.page-destination-group,
+.modal-action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.page-destination-group {
+    padding-right: 8px;
+    border-right: 1px solid var(--n-border-color);
+}
+
+.page-destination-active {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--n-primary-color) 18%, transparent);
+}
+
 .about-panel {
     display: flex;
     flex-direction: column;
@@ -311,14 +345,14 @@ const handleOpenDocs = () => {
 .about-link-label {
     flex-shrink: 0;
     font-size: 11px;
-    color: var(--text-color-3);
+    color: var(--n-text-color-3);
 }
 
 .about-link-value {
     min-width: 0;
     font-size: 12px;
     font-weight: 600;
-    color: var(--text-color-2);
+    color: var(--n-text-color-2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -328,6 +362,6 @@ const handleOpenDocs = () => {
     width: 12px;
     height: 12px;
     flex-shrink: 0;
-    color: var(--text-color-3);
+    color: var(--n-text-color-3);
 }
 </style>

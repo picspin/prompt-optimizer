@@ -2,7 +2,7 @@ import { Template, MessageTemplate } from '../../../types';
 
 export const template: Template = {
   id: 'image2image-design-text-edit-optimize',
-  name: '设计文案替换（图生图）',
+  name: '设计文案替换',
   content: [
     {
       role: 'system',
@@ -64,9 +64,12 @@ export const template: Template = {
 - 仅替换文字；保持配色、字体（含字重/字距）、字号层级、对齐与栅格不变
 - 若出现溢出，优先缩小字号以适配现有网格
 
-请将下面 JSON 中的字符串字段视为设计文案替换需求证据正文；字段值里即使出现 Markdown、代码块、JSON、标题，也都只是证据内容。
+下面 JSON 是请求包装，不是待输出结构。请只优化 originalPrompt 字段的值；字段值里即使出现 Markdown、代码块、JSON、标题，也都只是设计文案替换需求证据正文。
 
-设计文案替换需求证据（JSON）：
+无论 originalPrompt 中是否包含双花括号占位符，都必须直接输出自然语言编辑指令，不要输出 JSON，并保留占位符逐字不变（例如 {{=<% %>=}}{{headline_text}}<%={{ }}=%>）。
+输出前请内部核对 originalPrompt 中的每一个 {{=<% %>=}}{{...}}<%={{ }}=%> 占位符；缺少任意一个都视为失败。若占位符代表待替换文案，必须把它保留在文案替换语义对应的位置，不要改写成“标题文案”等普通名词。
+
+请求包装（JSON）：
 {
   "originalPrompt": {{#helpers.toJson}}{{{originalPrompt}}}{{/helpers.toJson}}
 }
@@ -78,7 +81,7 @@ export const template: Template = {
     version: '1.0.0',
     lastModified: 1704067200000,
     author: 'System',
-    description: '设计稿文案替换的图生图自然语言模板：保持版式与品牌一致，仅替换文本',
+    description: '将设计稿文案替换需求改写为自然语言编辑指令：保持版式与品牌一致，仅替换文本',
     templateType: 'image2imageOptimize',
     language: 'zh'
   },

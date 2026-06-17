@@ -2,6 +2,62 @@
 
 Full release narratives now live in versioned files under `releases/`. This file stays as the index and summary entry point.
 
+## [2.11.6] - 2026-06-09
+- EN: This patch updates the MiniMax default model to M3, fixes OpenAI large image-model parameter handling, supports Unicode variable names, and improves provider error details. See [Release Notes (EN)](releases/v2.11.6.en.md).
+- 中文：本次补丁将 MiniMax 默认模型更新到 M3，修复 OpenAI 大图模型参数兼容，支持 Unicode 变量名，并优化 provider 错误详情。参见 [版本说明（中文）](releases/v2.11.6.zh-CN.md)。
+
+## [2.11.5] - 2026-05-28
+- EN: This patch adds Xiaomi MiMo Token Plan provider support, hardens malformed text-model configuration handling, expands deployment guidance, and tidies deployment/project scaffolding. See [Release Notes (EN)](releases/v2.11.5.en.md).
+- 中文：本次补丁新增 Xiaomi MiMo Token Plan provider，强化异常文本模型配置处理，扩展部署说明，并整理部署与项目脚手架。参见 [版本说明（中文）](releases/v2.11.5.zh-CN.md)。
+
+## [2.11.4] - 2026-05-16
+- EN: This patch adds Grok text/image and Chrome built-in AI provider support, keeps local providers opt-in by default, restores web root env loading while isolating extension release builds, and softens themed tooltip surfaces. See [Release Notes (EN)](releases/v2.11.4.en.md).
+- 中文：本次补丁新增 Grok 文本 / 图像和 Chrome built-in AI provider，保持本地 provider 默认显式启用，恢复 Web 根环境变量加载并隔离扩展发布构建，同时优化主题化 tooltip 视觉。参见 [版本说明（中文）](releases/v2.11.4.zh-CN.md)。
+
+## [2.11.3] - 2026-05-14
+- EN: This patch improves model provider selection and themed UI polish, enables Prompt Garden inspiration image previews, clarifies built-in template labels, and adds analytics plus support links. See [Release Notes (EN)](releases/v2.11.3.en.md).
+- 中文：本次补丁优化模型供应商选择与主题化 UI，启用 Prompt Garden 灵感图片预览，澄清内置模板标签，并接入 analytics 与支持入口。参见 [版本说明（中文）](releases/v2.11.3.zh-CN.md)。
+
+## [2.11.2] - 2026-05-13
+- EN: This patch hardens prompt-template variable preservation, adds safer custom-model configuration controls, polishes workspace model switching and source cues, and restores the CI E2E replay gate after the DeepSeek fixture drift. See [Release Notes (EN)](releases/v2.11.2.en.md).
+- 中文：本次补丁强化提示词模板变量保留，补充更安全的自定义模型配置能力，优化工作区模型切换和来源提示，并修复 DeepSeek 夹具漂移导致的 CI E2E replay 门禁失败。参见 [版本说明（中文）](releases/v2.11.2.zh-CN.md)。
+
+## [2.11.1] - 2026-05-11
+- EN: This patch restores image-workspace analysis actions, adds single-favorite HTML/PNG sharing with import support, and updates the documentation for sharing and backups. See [Release Notes (EN)](releases/v2.11.1.en.md).
+- 中文：本次补丁修复图像工作区分析操作，新增单个收藏 HTML/PNG 分享与导入，并补充分享和备份相关文档。参见 [版本说明（中文）](releases/v2.11.1.zh-CN.md)。
+
+## [2.11.0] - 2026-05-10
+- EN: This minor release adds deployment-aware remote backups, safer resource-complete restore flows, OpenAI multi-image edit support, and a Prompt Garden image-to-image guide. See [Release Notes (EN)](releases/v2.11.0.en.md).
+- 中文：本次小版本发布新增部署感知的远程备份、更安全的资源完整恢复流程、OpenAI 多图编辑支持，以及 Prompt Garden 图生图指南。参见 [版本说明（中文）](releases/v2.11.0.zh-CN.md)。
+
+## [2.10.3] - 2026-05-06
+- EN: This patch adds a best-effort LLM image-input compatibility layer so non-standard input formats can be converted to PNG before provider requests without changing stored assets. See [Release Notes (EN)](releases/v2.10.3.en.md).
+- 中文：本次补丁新增 LLM 输入图片格式兼容层，在不改变已保存素材的前提下，尽力将非标准输入格式转为 PNG 后再请求模型。参见 [版本说明（中文）](releases/v2.10.3.zh-CN.md)。
+
+## [2.10.2] - 2026-05-06
+- EN: This patch clarifies Prompt Optimizer and Prompt Garden positioning, adds a bilingual Prompt Garden image workflow tutorial, and fixes optional prompt-asset variable handling. See [Release Notes (EN)](releases/v2.10.2.en.md).
+- 中文：本次补丁澄清 Prompt Optimizer 与 Prompt Garden 的产品定位，新增双语 Prompt Garden 图像工作流教程，并修复可选提示词资产变量处理。参见 [版本说明（中文）](releases/v2.10.2.zh-CN.md)。
+
+## [2.10.1] - 2026-05-04
+- EN: This patch adds a comprehensive MkDocs documentation site with bilingual support, fixes Pro workspace actions broken by RouterView refactoring, corrects Prompt Garden nav paths, and updates project landing page copy. See [Release Notes (EN)](releases/v2.10.1.en.md).
+- 中文：本次补丁新增完整的 MkDocs 双语文档站，修复 RouterView 重构导致的 Pro 工作区操作失效，修正 Prompt Garden 导航路径，并更新项目落地页文案。参见 [版本说明（中文）](releases/v2.10.1.zh-CN.md)。
+
+## [2.10.0] - 2026-05-03
+- EN: This release standardizes prompt model/session structures, turns favorites into resource-aware prompt assets, adds Prompt Garden discovery/import/favorite flows, expands resource-complete backups, and improves desktop IPC reliability. See [Release Notes (EN)](releases/v2.10.0.en.md).
+- 中文：本次发布标准化提示词模型与会话结构，将收藏升级为资源感知的提示词资产，加入 Prompt Garden 发现 / 导入 / 收藏流程，扩展资源完整备份，并提升桌面端 IPC 可靠性。参见 [版本说明（中文）](releases/v2.10.0.zh-CN.md)。
+
+## [2.9.6] - 2026-04-27
+- EN: This release enhances favorites with reproducibility example editing, media management, and one-click example application to workspace sessions. See [Release Notes (EN)](releases/v2.9.6.en.md).
+- 中文：本次发布增强收藏功能，支持可复现性示例编辑、媒体管理，以及一键将示例应用到工作区会话。参见 [版本说明（中文）](releases/v2.9.6.zh-CN.md)。
+
+## [2.9.5] - 2026-04-24
+- EN: This patch adds a workspace-wide clear-content tool, makes Prompt Garden imports start from a clean workspace state, restores missing DeepSeek parameter and import-failure localization, and keeps Trellis workspace artifacts ignored. See [Release Notes (EN)](releases/v2.9.5.en.md).
+- 中文：本次补丁新增工作区“清理内容”工具，让 Prompt Garden 导入先清场再写入新内容，补齐 DeepSeek 参数与导入失败提示的本地化，并忽略 Trellis 工作区产物。参见 [版本说明（中文）](releases/v2.9.5.zh-CN.md)。
+
+## [2.9.4] - 2026-04-20
+- EN: This release improves image workflow reliability with restored image-to-image session persistence, aligns Seedream model metadata and built-in defaults with current capabilities, adds OpenAI Responses request-style support, and makes desktop/local release flows more robust. See [Release Notes (EN)](releases/v2.9.4.en.md).
+- 中文：本次发布修复了图生图会话恢复、按最新能力校准了 Seedream 模型元数据与内置默认项，补上 OpenAI Responses 请求风格支持，并让桌面端本地直连与 Release 发布链路更稳。参见 [版本说明（中文）](releases/v2.9.4.zh-CN.md)。
+
 ## [2.9.3] - 2026-04-10
 - EN: This release establishes an English-first locale baseline, restores localized user feedback across key UI workflows, hardens MCP and repository guardrails, and extracts evaluation prompt assets into maintainable modules. See [Release Notes (EN)](releases/v2.9.3.en.md).
 - 中文：本次发布建立了 English-first locale 基线，补回关键 UI 流程的本地化反馈，并加固了 MCP、仓库守护校验与评估模板资产结构。参见 [版本说明（中文）](releases/v2.9.3.zh-CN.md)。

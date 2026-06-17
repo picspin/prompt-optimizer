@@ -24,10 +24,11 @@ describe('SeedreamImageAdapter', () => {
       const provider = adapter.getProvider()
 
       expect(provider.id).toBe('seedream')
-      expect(provider.name).toContain('Seedream')
+      expect(provider.name).toBe('Seedream')
       expect(provider.requiresApiKey).toBe(true)
       expect(provider.defaultBaseURL).toBe('https://ark.cn-beijing.volces.com/api/v3')
       expect(provider.supportsDynamicModels).toBe(false)
+      expect(provider.apiKeyUrl).toBe('https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey')
       expect(provider.connectionSchema?.required).toContain('apiKey')
       expect(provider.connectionSchema?.optional).toEqual(expect.arrayContaining(['baseURL']))
     })
@@ -55,11 +56,29 @@ describe('SeedreamImageAdapter', () => {
       })
     })
 
+    test('should include Seedream 4.0, 4.5, and 5.0 lite model ids', () => {
+      const modelIds = adapter.getModels().map(model => model.id)
+
+      expect(modelIds).toEqual(expect.arrayContaining([
+        'doubao-seedream-4-0-250828',
+        'doubao-seedream-4-5-251128',
+        'doubao-seedream-5-0-260128'
+      ]))
+    })
+
     test('should declare multi-image capability for Seedream 4.0', () => {
       const model = adapter.getModels()[0]
 
       expect(model.capabilities.image2image).toBe(true)
       expect(model.capabilities.multiImage).toBe(true)
+    })
+
+    test('should declare multi-image capability for Seedream 4.5', () => {
+      const model = adapter.getModels().find(item => item.id === 'doubao-seedream-4-5-251128')
+
+      expect(model).toBeDefined()
+      expect(model?.capabilities.image2image).toBe(true)
+      expect(model?.capabilities.multiImage).toBe(true)
     })
 
     test('should include watermark and size parameters', () => {
@@ -318,6 +337,49 @@ describe('SeedreamImageAdapter', () => {
 
       expect(body.response_format).toBe('b64_json')
     })
+
+    test('should send Seedream 5.0 lite specific payload fields', async () => {
+      const config: ImageModelConfig = {
+        id: 'seedream-50-config',
+        name: 'Seedream 5.0 Config',
+        providerId: 'seedream',
+        modelId: 'doubao-seedream-5-0-260128',
+        enabled: true,
+        connectionConfig: {
+          apiKey: 'test-api-key',
+          baseURL: 'https://ark.cn-beijing.volces.com/api/v3'
+        },
+        paramOverrides: {
+          output_format: 'jpeg',
+          tools: ['web_search'],
+          size: '2048x2048'
+        }
+      }
+
+      const request: ImageRequest = {
+        prompt: '结合联网信息生成新闻插画',
+        configId: config.id,
+        count: 1
+      }
+
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          code: 0,
+          data: [{ b64_json: 'aGVsbG8=' }]
+        })
+      })
+
+      await adapter.generate(request, config)
+
+      const [, init] = vi.mocked(fetch).mock.calls[0]!
+      const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>
+
+      expect(body.output_format).toBe('jpeg')
+      expect(body.tools).toEqual(['web_search'])
+      expect(body.response_format).toBe('b64_json')
+      expect(body.sequential_image_generation).toBeUndefined()
+    })
   })
 
   describe('Provider Capabilities', () => {
@@ -346,6 +408,25 @@ describe('SeedreamImageAdapter', () => {
 
       expect(sizeParam?.allowedValues).toContain('1024x1024')
       expect(sizeParam?.allowedValues).toContain('512x512')
+    })
+
+    test('should use the documented size schema for Seedream 4.5', () => {
+      const model = adapter.getModels().find(item => item.id === 'doubao-seedream-4-5-251128')
+      const sizeParam = model?.parameterDefinitions?.find(p => p.name === 'size')
+
+      expect(sizeParam?.defaultValue).toBe('2048x2048')
+      expect(sizeParam?.allowedValues).toEqual(expect.arrayContaining(['2K', '4K', '2048x2048']))
+      expect(sizeParam?.allowedValues).not.toContain('1K')
+      expect(sizeParam?.allowedValues).not.toContain('512x512')
+    })
+
+    test('should expose Seedream 5.0 lite specific parameters', () => {
+      const model = adapter.getModels().find(item => item.id === 'doubao-seedream-5-0-260128')
+      const parameterNames = model?.parameterDefinitions.map(p => p.name) || []
+
+      expect(parameterNames).toEqual(expect.arrayContaining(['size', 'output_format', 'tools']))
+      expect(parameterNames).not.toContain('sequential_image_generation')
+      expect(parameterNames).not.toContain('watermark')
     })
 
     test('should validate watermark parameter', () => {

@@ -14,23 +14,35 @@ const IMAGE_PROVIDER_ENV_KEYS = {
   seedream: ['VITE_SEEDREAM_API_KEY', 'VITE_ARK_API_KEY'],
   dashscope: ['VITE_DASHSCOPE_API_KEY'],
   modelscope: ['VITE_MODELSCOPE_API_KEY'],
-  cloudflare: ['VITE_CF_API_TOKEN']
+  ollama: [],
+  cloudflare: ['VITE_CF_API_TOKEN'],
+  grok: ['VITE_GROK_API_KEY', 'VITE_XAI_API_KEY']
 } as const
 
-/**
- * 配置 ID 映射（保持现有 ID 不变以兼容用户数据）
- * name 将从 provider.name 获取，无需硬编码
- */
-const IMAGE_CONFIG_IDS: Record<string, string> = {
-  openrouter: 'image-openrouter-nanobanana',
-  gemini: 'image-gemini-nanobanana',
-  openai: 'image-openai-gpt',
-  siliconflow: 'image-siliconflow-kolors',
-  seedream: 'image-seedream',
-  dashscope: 'image-dashscope',
-  modelscope: 'image-modelscope',
-  cloudflare: 'image-cloudflare-flux-klein'
+type BuiltinImageConfigSpec = {
+  providerId: keyof typeof IMAGE_PROVIDER_ENV_KEYS
+  configId: string
+  modelId?: string
+  displayName?: string
 }
+
+/**
+ * 内置图像配置定义。
+ * 允许一个 provider 生成多个内置配置，例如 Seedream 4.0 与 5.0 lite。
+ */
+const IMAGE_BUILTIN_CONFIGS: readonly BuiltinImageConfigSpec[] = [
+  { providerId: 'openrouter', configId: 'image-openrouter-nanobanana' },
+  { providerId: 'gemini', configId: 'image-gemini-nanobanana' },
+  { providerId: 'openai', configId: 'image-openai-gpt' },
+  { providerId: 'siliconflow', configId: 'image-siliconflow-kolors' },
+  { providerId: 'seedream', configId: 'image-seedream', modelId: 'doubao-seedream-4-0-250828' },
+  { providerId: 'seedream', configId: 'image-seedream-50-lite', modelId: 'doubao-seedream-5-0-260128', displayName: 'Doubao Seedream 5.0 Lite' },
+  { providerId: 'dashscope', configId: 'image-dashscope' },
+  { providerId: 'modelscope', configId: 'image-modelscope' },
+  { providerId: 'ollama', configId: 'image-ollama' },
+  { providerId: 'cloudflare', configId: 'image-cloudflare-flux-klein' },
+  { providerId: 'grok', configId: 'image-grok-imagine' }
+] as const
 
 /**
  * 特殊 baseURL 环境变量（仅需要覆盖的 Provider）
@@ -53,6 +65,7 @@ const IMAGE_EXTRA_CONNECTION_ENV_KEYS: Record<string, Record<string, string[]>> 
  * 某些 Provider 需要多个字段都存在时才视为可用
  */
 const IMAGE_REQUIRED_CONNECTION_FIELDS: Record<string, string[]> = {
+  ollama: [],
   cloudflare: ['apiKey', 'accountId']
 }
 
@@ -62,6 +75,18 @@ function getFirstEnvValue(envKeys: readonly string[]): string {
     if (value) return value
   }
   return ''
+}
+
+function hasConnectionValue(value: unknown): boolean {
+  return typeof value === 'string' ? value.trim().length > 0 : !!value
+}
+
+function shouldEnableFromRequiredFields(
+  connectionConfig: Record<string, unknown>,
+  requiredConnectionFields: readonly string[]
+): boolean {
+  return requiredConnectionFields.length > 0
+    && requiredConnectionFields.every(field => hasConnectionValue(connectionConfig[field]))
 }
 
 /**
@@ -78,14 +103,15 @@ export function getDefaultImageModels(registry?: IImageAdapterRegistry): Record<
   const result: Record<string, ImageModelConfig> = {}
 
   // 批量生成配置（与文本模型风格一致）
-  for (const [providerId, envKeys] of Object.entries(IMAGE_PROVIDER_ENV_KEYS)) {
-    const configId = IMAGE_CONFIG_IDS[providerId]
-    if (!configId) continue
-
+  for (const builtinConfig of IMAGE_BUILTIN_CONFIGS) {
+    const providerId = builtinConfig.providerId
+    const envKeys = IMAGE_PROVIDER_ENV_KEYS[providerId]
     const adapter = adapterRegistry.getAdapter(providerId)
     const provider = adapter.getProvider()
     const models = adapterRegistry.getStaticModels(providerId)
-    const defaultModel = models[0] || adapter.buildDefaultModel(providerId)
+    const defaultModel = models.find(model => model.id === builtinConfig.modelId)
+      || models[0]
+      || adapter.buildDefaultModel(builtinConfig.modelId || providerId)
 
     // 获取 API Key（支持备选环境变量）
     const apiKey = getFirstEnvValue(envKeys)
@@ -112,14 +138,11 @@ export function getDefaultImageModels(registry?: IImageAdapterRegistry): Record<
     }
 
     const requiredConnectionFields = IMAGE_REQUIRED_CONNECTION_FIELDS[providerId] || ['apiKey']
-    const enabled = requiredConnectionFields.every(field => {
-      const value = connectionConfig[field]
-      return typeof value === 'string' ? value.trim().length > 0 : !!value
-    })
+    const enabled = shouldEnableFromRequiredFields(connectionConfig, requiredConnectionFields)
 
-    result[configId] = {
-      id: configId,
-      name: provider.name,  // 从 provider 获取名称，不再硬编码
+    result[builtinConfig.configId] = {
+      id: builtinConfig.configId,
+      name: builtinConfig.displayName || provider.name,
       providerId,
       modelId: defaultModel.id,
       enabled,
@@ -139,7 +162,7 @@ export function getDefaultImageModels(registry?: IImageAdapterRegistry): Record<
  * 用于判断某个配置是否为内置模型（而非用户自定义）
  */
 export function getBuiltinImageConfigIds(): string[] {
-  return Object.values(IMAGE_CONFIG_IDS)
+  return IMAGE_BUILTIN_CONFIGS.map(config => config.configId)
 }
 
 // 直接导出所有图像模型配置（保持向后兼容，与文本模型风格一致）

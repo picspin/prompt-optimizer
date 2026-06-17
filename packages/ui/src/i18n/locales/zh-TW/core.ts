@@ -34,6 +34,39 @@ const messages = {
     "collapse": "收合",
     "hide": "隱藏",
     "clear": "清空",
+    "workspaceTools": "工作區工具",
+    "promptGarden": {
+      "title": "Prompt Garden",
+      "discover": "發現花園提示詞",
+      "importPrompt": "匯入花園提示詞",
+      "importFavorite": "匯入為收藏",
+      "importTitle": "匯入 Prompt Garden 提示詞",
+      "importHint": "貼上從 Prompt Garden 複製的匯入碼，也可以貼上包含 importCode 的連結。",
+      "importFavoriteTitle": "從 Prompt Garden 匯入收藏",
+      "importFavoriteHint": "貼上 Prompt Garden 匯入碼或連結，匯入後會開啟收藏儲存確認。",
+      "importPlaceholder": "輸入匯入碼",
+      "text2ImageGuideTitle": "從 Prompt Garden 發現文生圖提示詞",
+      "text2ImageGuideHint": "沒有靈感時，可以先去花園挑一個提示詞，或貼上匯入碼直接帶入目前工作區。",
+      "image2ImageGuideTitle": "從 Prompt Garden 發現圖生圖提示詞",
+      "image2ImageGuideHint": "沒有改圖思路時，可以先去花園挑一個圖生圖提示詞，或貼上匯入碼帶入目前工作區。",
+      "inspirationTrigger": "靈感",
+      "inspirationStartTitle": "從靈感開始",
+      "inspirationTitle": "找點靈感",
+      "loadingSuggestions": "正在載入靈感...",
+      "refreshSuggestions": "換一批",
+      "browseMore": "瀏覽更多",
+      "noSuggestions": "暫時沒有推薦，可以去花園瀏覽或貼上匯入碼。",
+      "useShort": "使用",
+      "replaceImportShort": "替換匯入",
+      "discoverShort": "去發現",
+      "importShort": "貼上匯入碼",
+      "importingStatus": "正在從 Prompt Garden 取得提示詞和圖片資源..."
+    },
+    "clearContent": "清理內容",
+    "clearContentWillLabel": "清理內容：",
+    "clearContentWill": "提示詞、衍生結果、測試結果、臨時變數",
+    "clearContentKeepLabel": "不會清理內容：",
+    "clearContentKeep": "模型、模板、版面配置選擇",
     "createdAt": "建立於",
     "version": "V{version}",
     "actions": "操作",
@@ -53,6 +86,7 @@ const messages = {
     "integer": "整數",
     "optional": "選填",
     "copy": "複製",
+    "fullscreen": "全螢幕",
     "content": "內容",
     "focus": "聚焦",
     "noContent": "暫無內容",
@@ -89,6 +123,18 @@ const messages = {
   "actions": {
     "copy": "複製",
     "fullscreen": "全螢幕"
+  },
+  "copyOpen": {
+    "copyOnly": "僅複製",
+    "copyAndOpen": "複製並開啟 {platform}",
+    "selectAction": "選擇複製動作",
+    "openFailed": "已複製，但開啟平台失敗",
+    "platforms": {
+      "chatgpt": "ChatGPT",
+      "claude": "Claude",
+      "gemini": "Gemini",
+      "deepseek": "DeepSeek"
+    }
   },
   "nav": {
     "home": "首頁",
@@ -176,7 +222,8 @@ const messages = {
       "initTemplateFailed": "初始化範本選擇失敗",
       "appInitFailed": "應用程式初始化失敗，請重新整理或聯絡支援",
       "historyUnavailable": "歷史紀錄服務暫時不可用",
-      "loadRecordFailed": "載入版本內容失敗"
+      "loadRecordFailed": "載入版本內容失敗",
+      "promptGardenImportFailed": "從 Prompt Garden 匯入失敗"
     },
     "success": {
       "optimizeSuccess": "優化成功",
